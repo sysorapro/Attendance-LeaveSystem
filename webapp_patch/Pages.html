@@ -1,0 +1,1512 @@
+
+<script>
+// ============================================================
+// Pages.js — Page Renderers (SPA)
+// ============================================================
+
+// ── Page Router ───────────────────────────────────────────────
+async function renderPage(page) {
+  const container = document.getElementById('pageContent');
+  showPageLoader('pageContent');
+  try {
+    switch (page) {
+      case 'dashboard':      await renderDashboard(); break;
+      case 'myAttendance':   await renderMyAttendance(); break;
+      case 'myLeaves':       await renderMyLeaves(); break;
+      case 'myBalance':      await renderMyBalance(); break;
+      case 'myMissions':     await renderMyMissions(); break;
+      case 'myPermissions':  await renderMyPermissions(); break;
+      case 'myReports':      await renderMyReports(); break;
+      case 'attendance':     await renderAttendance(); break;
+      case 'leaves':         await renderLeaves(); break;
+      case 'missions':       await renderMissions(); break;
+      case 'permissions':    await renderPermissions(); break;
+      case 'employees':      await renderEmployees(); break;
+      case 'users':          await renderUsers(); break;
+      case 'departments':    await renderDepartments(); break;
+      case 'leaveTypes':     await renderLeaveTypes(); break;
+      case 'holidays':       await renderHolidays(); break;
+      case 'leaveBalance':   await renderLeaveBalance(); break;
+      case 'reports':        await renderReports(); break;
+      case 'overtimeBalance':await renderOvertimeBalance(); break;
+      case 'audit':          await renderAudit(); break;
+      case 'settings':       await renderSettings(); break;
+      case 'myProfile':      await renderMyProfile(); break;
+      default:               container.innerHTML = `<div class="empty-state"><span class="material-icons-round">construction</span><div>${page} — ${APP.lang==='ar'?'قيد التطوير':'Under Development'}</div></div>`;
+    }
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state text-danger"><span class="material-icons-round">error</span><div>${err.message}</div></div>`;
+    console.error(err);
+  }
+  // Sort + filter كل الجداول بعد أي render
+  setTimeout(initAllTables, 80);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────
+// Call after any action that changes today's attendance data so the
+// next dashboard load fetches fresh data instead of serving the stale cache.
+function bustDashboardCache() { _dashCache.ts = 0; }
+// Client-side cache for dashboard stats (60 s TTL).
+// Avoids re-fetching 4 Sheets on every nav-click back to the dashboard.
+const _dashCache = { stats: null, charts: null, ts: 0 };
+const _DASH_TTL_MS = 60_000;
+
+async function renderDashboard() {
+  const container = document.getElementById('pageContent');
+  const now = Date.now();
+  let summaryRes;
+  if (_dashCache.stats && (now - _dashCache.ts) < _DASH_TTL_MS) {
+    summaryRes = _dashCache.stats;
+  } else {
+    summaryRes = await api('getMyMonthSummary', {});
+    if (summaryRes.success) {
+      _dashCache.stats = summaryRes;
+      _dashCache.ts    = now;
+    }
+  }
+
+  const d = summaryRes.success ? summaryRes.data : {};
+  const periodLabel = d.periodFrom && d.periodTo
+    ? `${formatDateAr(d.periodFrom)} → ${formatDateAr(d.periodTo)}` : '—';
+  const verse = d.verse || {};
+  const holidays = d.upcomingHolidays || [];
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-header-title">${t('dashboard')}</div>
+        <div class="page-header-sub">${new Date().toLocaleDateString(APP.lang==='ar'?'ar-EG':'en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+      </div>
+      <div id="liveClock" class="fw-800" style="font-size:22px;color:var(--primary);font-variant-numeric:tabular-nums">—</div>
+    </div>
+
+    <!-- Quran Verse of the Day -->
+    ${verse.ar ? `
+    <div class="card mb-4" style="background:linear-gradient(135deg,var(--primary) 0%,#2d5a9e 100%);border:none;">
+      <div class="p-4 text-center">
+        <div style="font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.6);margin-bottom:10px;text-transform:uppercase">آية اليوم</div>
+        <div style="font-family:'Cairo',sans-serif;font-size:22px;font-weight:700;color:#fff;line-height:1.8;margin-bottom:8px">${verse.ar}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.7)">${verse.ref}</div>
+      </div>
+    </div>` : ''}
+
+    <!-- Period Badge -->
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span class="material-icons-round" style="color:var(--primary);font-size:18px">calendar_month</span>
+      <span style="font-size:13px;color:var(--text-secondary)">${t('currentPeriod')}: <strong>${periodLabel}</strong></span>
+    </div>
+
+    <!-- 8 Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(16,185,129,0.1)"><span class="material-icons-round" style="color:#10b981">how_to_reg</span></div>
+          <div class="stat-value">${d.totalAttendanceDays||0} ${t('days')||'يوم'}</div>
+          <div class="stat-label">${t('totalAttendance')||'إجمالي الحضور'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(139,92,246,0.1)"><span class="material-icons-round" style="color:#8b5cf6">beach_access</span></div>
+          <div class="stat-value">${d.totalLeaveDays||0} ${t('days')||'يوم'}</div>
+          <div class="stat-label">${t('leaveDaysUsed')||'إجمالي الإجازات'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(100,116,139,0.1)"><span class="material-icons-round" style="color:#64748b">directions_car</span></div>
+          <div class="stat-value">${hoursToHM(d.totalMissionHours||0)}</div>
+          <div class="stat-label">${t('missions')||'إجمالي المأموريات'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.1)"><span class="material-icons-round" style="color:#f59e0b">more_time</span></div>
+          <div class="stat-value">${hoursToHM(d.totalOvertimeHours||0)}</div>
+          <div class="stat-label">${t('overtimeHours')||'إجمالي الإضافي'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(59,130,246,0.1)"><span class="material-icons-round" style="color:#3b82f6">door_open</span></div>
+          <div class="stat-value">${hoursToHM(d.totalPermissionHours||0)}</div>
+          <div class="stat-label">${t('permissionsUsed')||'الإذن الشهري'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(16,185,129,0.1)"><span class="material-icons-round" style="color:#10b981">savings</span></div>
+          <div class="stat-value" style="color:#10b981">${d.remainingLeaveDays||0} ${t('days')||'يوم'}</div>
+          <div class="stat-label">${t('remainingLeaveBalance')||'رصيد الإجازات'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.12)"><span class="material-icons-round" style="color:#d97706">account_balance_wallet</span></div>
+          <div class="stat-value" style="color:#d97706">${hoursToHM(d.overtimeBalance||0)}</div>
+          <div class="stat-label">${t('overtimeBalance')||'رصيد الإضافي'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="stat-icon" style="background:rgba(239,68,68,0.1)"><span class="material-icons-round" style="color:#ef4444">event_busy</span></div>
+          <div class="stat-value">${holidays.length}</div>
+          <div class="stat-label">${t('upcomingOfficialHolidays')}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upcoming Holidays -->
+    ${holidays.length > 0 ? `
+    <div class="card mb-4">
+      <div class="p-3">
+        <div class="section-title mb-3"><span class="material-icons-round">event_busy</span> ${t('upcomingOfficialHolidays')}</div>
+        <div class="d-flex flex-wrap gap-2">
+          ${holidays.map(h => `
+            <div style="background:var(--surface-2);border-radius:10px;padding:10px 16px;min-width:160px">
+              <div style="font-size:12px;color:var(--text-secondary)">${formatDateAr(h.date)}</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-top:2px">${APP.lang==='ar'?h.nameAr:h.nameEn}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+  `;
+
+  startClock();
+}
+
+function statCard(icon, label, value, type, color) {
+  const bgMap = { primary:'rgba(59,130,246,0.1)', success:'rgba(16,185,129,0.1)',
+    danger:'rgba(239,68,68,0.1)', warning:'rgba(245,158,11,0.1)',
+    info:'rgba(139,92,246,0.1)', secondary:'rgba(100,116,139,0.1)', accent:'rgba(245,158,11,0.1)' };
+  return `
+    <div class="col-6 col-md-4 col-xl-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:${bgMap[type]||bgMap.primary}">
+          <span class="material-icons-round" style="color:${color}">${icon}</span>
+        </div>
+        <div>
+          <div class="stat-value">${value}</div>
+          <div class="stat-label">${label}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// buildMyMonthSummaryWidget removed — merged into renderDashboard
+
+function buildCharts(c) {
+  if (!c) return;
+  destroyCharts();
+
+  const isDark = APP.theme === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#8b949e' : '#64748b';
+
+  // Attendance Bar Chart
+  const attCtx = document.getElementById('attendanceChart');
+  if (attCtx && c.monthlyAttendance) {
+    APP.charts.attendance = new Chart(attCtx, {
+      type: 'bar',
+      data: {
+        labels: c.monthlyAttendance.map(m => APP.lang==='ar' ? m.label : m.labelEn),
+        datasets: [{ label: t('attendance'), data: c.monthlyAttendance.map(m => m.value),
+          backgroundColor: 'rgba(30,58,95,0.75)', borderRadius: 8, borderSkipped: false }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                  y: { grid: { color: gridColor }, ticks: { color: textColor } } } }
+    });
+  }
+
+  // Leave Doughnut
+  const leaveCtx = document.getElementById('leaveChart');
+  if (leaveCtx && c.leaveDistribution && c.leaveDistribution.length) {
+    const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+    APP.charts.leave = new Chart(leaveCtx, {
+      type: 'doughnut',
+      data: {
+        labels: c.leaveDistribution.map(l => APP.lang==='ar' ? l.name : l.nameEn),
+        datasets: [{ data: c.leaveDistribution.map(l => l.value), backgroundColor: colors }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom',
+        labels: { color: textColor, font: { family: APP.lang==='ar'?'Cairo':'Inter' } } } } }
+    });
+  }
+
+  // Delay Line
+  const delCtx = document.getElementById('delayChart');
+  if (delCtx && c.monthlyDelay) {
+    APP.charts.delay = new Chart(delCtx, {
+      type: 'line',
+      data: {
+        labels: c.monthlyDelay.map(m => APP.lang==='ar' ? m.label : m.labelEn),
+        datasets: [{ label: t('delayMinutesLabel'), data: c.monthlyDelay.map(m => m.value),
+          borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                  y: { grid: { color: gridColor }, ticks: { color: textColor } } } }
+    });
+  }
+
+  // Overtime Line
+  const otCtx = document.getElementById('overtimeChart');
+  if (otCtx && c.monthlyOvertime) {
+    APP.charts.overtime = new Chart(otCtx, {
+      type: 'line',
+      data: {
+        labels: c.monthlyOvertime.map(m => APP.lang==='ar' ? m.label : m.labelEn),
+        datasets: [{ label: t('overtimeHoursChartLabel'), data: c.monthlyOvertime.map(m => m.value),
+          borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                  y: { grid: { color: gridColor }, ticks: { color: textColor } } } }
+    });
+  }
+}
+
+function destroyCharts() {
+  Object.values(APP.charts).forEach(ch => { try { ch.destroy(); } catch(e){} });
+  APP.charts = {};
+}
+
+// ── Check In / Out ────────────────────────────────────────────
+async function doCheckIn() {
+  const res = await api('checkIn', {});
+  if (res.success) {
+    SFX.checkIn();
+    showToast(res.message, 'success');
+    if (res.data && res.data.delayMinutes > 0) {
+      showToast(`${t('delayToastPrefix')}: ${res.data.delayMinutes} ${t('minutes')}`, 'warning');
+    }
+    bustDashboardCache(); // today's attendance changed — fetch fresh stats
+    renderPage('dashboard');
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function doCheckOut() {
+  const res = await api('checkOut', {});
+  if (res.success) {
+    showToast(res.message, 'success');
+    bustDashboardCache(); // today's attendance changed — fetch fresh stats
+    renderPage('dashboard');
+  } else { showToast(res.message, 'danger'); }
+}
+
+// ── My Attendance ─────────────────────────────────────────────
+async function renderMyAttendance() {
+  const container = document.getElementById('pageContent');
+  const { from: defaultFrom, to: defaultTo } = await getDefaultDateRange();
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('myAttendance')}</div></div>
+    </div>
+
+    ${bioPunchCardHtml()}
+    ${buildManualAttendanceForm('mat')}
+
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-3"><label class="form-label">${t('dateFrom')}</label>
+        <input type="date" class="form-control" id="attFrom" value="${defaultFrom}"></div>
+      <div class="col-md-3"><label class="form-label">${t('dateTo')}</label>
+        <input type="date" class="form-control" id="attTo" value="${defaultTo}"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" onclick="loadMyAttendance()">
+        <span class="material-icons-round">search</span>${t('filter')}</button></div>
+    </div>
+    <div class="card"><div class="card-body p-0 data-table-wrapper" id="attTableWrapper">
+      <div class="empty-state"><span class="material-icons-round">schedule</span><div>${t('loading')}</div></div>
+    </div></div>
+
+    ${buildEditAttendanceModal()}`;
+  wireManualAttendanceForm('mat');
+  await loadMyAttendance();
+}
+
+// Dedicated edit modal — opened by the pencil icon in the My Attendance table.
+// Kept separate from the quick-entry form at the top so editing always shows
+// a clear, unmistakable popup window, consistent with My Leaves/Missions/Permissions.
+function buildEditAttendanceModal() {
+  return `
+    <div class="modal fade" id="editAttModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><span class="material-icons-round" style="vertical-align:middle;font-size:20px;color:var(--primary)">edit_calendar</span> ${t('edit')} — ${t('myAttendance')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="eatID">
+          <div class="mb-3"><label class="form-label">${t('date')}</label>
+            <input type="date" class="form-control" id="eatDate" disabled></div>
+          <div class="row g-3">
+            <div class="col-6"><label class="form-label">${t('checkInTime')}</label>
+              <input type="time" class="form-control" id="eatIn"></div>
+            <div class="col-6"><label class="form-label">${t('checkOutTime')}</label>
+              <input type="time" class="form-control" id="eatOut"></div>
+          </div>
+          <div class="mt-3"><label class="form-label">${t('notes')}</label>
+            <textarea class="form-control" id="eatNotes" rows="2"></textarea></div>
+          <div class="alert alert-info py-2 small mt-3 mb-0">${t('autoCalcAlert')}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitEditAttendance()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+// Reusable manual attendance entry card — used in both "My Attendance" and "My Profile".
+// `prefix` makes element IDs unique per instance so both can exist in the DOM logic
+// without colliding (though only one is rendered at a time per page).
+function buildManualAttendanceForm(prefix) {
+  const todayVal = new Date().toISOString().split('T')[0];
+  return `
+    <div class="card mb-3 p-3">
+      <div class="section-title"><span class="material-icons-round">edit_calendar</span>${t('manualEntry')}</div>
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">${t('date')}</label>
+          <input type="date" class="form-control" id="${prefix}Date" value="${todayVal}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">${t('checkInTime')}</label>
+          <input type="time" class="form-control" id="${prefix}In">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">${t('checkOutTime')}</label>
+          <div class="input-group">
+            <input type="time" class="form-control" id="${prefix}Out">
+            <button class="btn btn-outline-secondary" type="button" id="${prefix}SuggestBtn"
+              title="${APP.lang==='ar'?'اقترح وقت الانصراف من وقت الحضور':'Suggest check-out from check-in'}">
+              <span class="material-icons-round" style="font-size:18px">auto_fix_high</span>
+            </button>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">${t('workHours')}</label>
+          <input type="text" class="form-control" id="${prefix}HoursPreview" disabled placeholder="—">
+        </div>
+      </div>
+      <div class="row g-3 align-items-end mt-1">
+        <div class="col-md-9">
+          <textarea class="form-control" id="${prefix}Notes" rows="1" placeholder="${t('notes')}"></textarea>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-primary w-100" onclick="submitManualAttendance('${prefix}')">
+            <span class="material-icons-round">calculate</span>${t('save')}
+          </button>
+        </div>
+      </div>
+      <div id="${prefix}Result" class="mt-3"></div>
+    </div>
+
+    <!-- Confirm overwrite modal -->
+    <div class="modal fade" id="${prefix}ConfirmModal" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-body text-center p-4">
+          <span class="material-icons-round" style="font-size:48px;color:var(--warning)">warning</span>
+          <div class="fw-bold mt-2 mb-1">${APP.lang==='ar'?'يوجد سجل حضور مسجَّل بالفعل لهذا اليوم':'An attendance record already exists for this day'}</div>
+          <div id="${prefix}ExistingInfo" class="small text-secondary mb-3"></div>
+          <div class="mb-3">${APP.lang==='ar'?'هل تريد التعديل عليه؟':'Do you want to overwrite it?'}</div>
+          <div class="d-flex gap-2 justify-content-center">
+            <button class="btn btn-secondary px-4" data-bs-dismiss="modal">${t('cancel')}</button>
+            <button class="btn btn-primary px-4" id="${prefix}ConfirmBtn">${t('confirm')}</button>
+          </div>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+// Computes the "should-leave" check-out time from a check-in time, mirroring
+// the server's Expected Check-out formula: check-in + (required hours − grace
+// period), Ramadan-aware. This is a quick client-side ESTIMATE to pre-fill
+// the field for convenience — the server still recomputes the authoritative
+// delay/overtime figures from scratch when the record is actually saved.
+function computeSuggestedCheckout(checkInTime, dateStr, settings) {
+  if (!checkInTime || !settings) return '';
+  const [h, m] = checkInTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return '';
+  const checkInMins = h * 60 + m;
+
+  const isRamadan = settings.RamadanFromDate && settings.RamadanToDate &&
+    dateStr && dateStr >= settings.RamadanFromDate && dateStr <= settings.RamadanToDate;
+  const requiredHours = parseFloat(isRamadan ? (settings.RamadanRequiredHours || 6) : (settings.NormalRequiredHours || 8));
+  const gracePeriod   = parseFloat(isRamadan ? (settings.RamadanGracePeriodMinutes || 10) : (settings.GracePeriodMinutes || 10));
+  const minRequiredMins = Math.max(0, requiredHours * 60 - gracePeriod);
+
+  const expected = ((checkInMins + minRequiredMins) % 1440 + 1440) % 1440;
+  return `${zeroPad(Math.floor(expected / 60))}:${zeroPad(expected % 60)}`;
+}
+
+// Live "work hours" preview from whatever is currently in the check-in/
+// check-out fields — purely informational, updates as the user types.
+function computeHoursPreview(checkInTime, checkOutTime) {
+  if (!checkInTime || !checkOutTime) return '';
+  const [h1, m1] = checkInTime.split(':').map(Number);
+  const [h2, m2] = checkOutTime.split(':').map(Number);
+  if ([h1,m1,h2,m2].some(isNaN)) return '';
+  let mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (mins < 0) mins += 1440; // handles an overnight shift crossing midnight
+  return hoursToHM(mins / 60);
+}
+
+// Wires up the auto-fill + live preview behavior for one manual-entry card.
+// Call this right after inserting buildManualAttendanceForm(prefix) into the DOM.
+function wireManualAttendanceForm(prefix) {
+  const dateEl  = document.getElementById(`${prefix}Date`);
+  const inEl    = document.getElementById(`${prefix}In`);
+  const outEl   = document.getElementById(`${prefix}Out`);
+  const hoursEl = document.getElementById(`${prefix}HoursPreview`);
+  const suggestBtn = document.getElementById(`${prefix}SuggestBtn`);
+  if (!inEl || !outEl || !hoursEl) return;
+
+  const refreshHours = () => { hoursEl.value = computeHoursPreview(inEl.value, outEl.value) || ''; };
+
+  const autoFillCheckout = async () => {
+    if (!inEl.value) { refreshHours(); return; }
+    const settings = await getCachedSettings();
+    const suggested = computeSuggestedCheckout(inEl.value, dateEl?.value, settings);
+    if (suggested) outEl.value = suggested;
+    refreshHours();
+  };
+
+  // Native <input type="time"> fires 'input'/'change' inconsistently across
+  // browsers depending on exactly how the user interacts with it (typing
+  // digits vs. using the picker, blurring or not) — so on top of listening
+  // for both, there's an explicit "✨ suggest" button next to the field that
+  // ALWAYS works regardless of what the browser did or didn't fire.
+  inEl.addEventListener('input', autoFillCheckout);
+  inEl.addEventListener('change', autoFillCheckout);
+  inEl.addEventListener('blur', autoFillCheckout);
+  outEl.addEventListener('input', refreshHours);
+  outEl.addEventListener('change', refreshHours);
+  dateEl?.addEventListener('change', autoFillCheckout);
+  dateEl?.addEventListener('input', autoFillCheckout);
+  suggestBtn?.addEventListener('click', autoFillCheckout);
+
+  // Belt-and-suspenders: also poll briefly right after the field is touched,
+  // in case a browser quirk suppresses every one of the events above.
+  let lastSeenIn = '';
+  inEl.addEventListener('keyup', () => {
+    if (inEl.value && inEl.value !== lastSeenIn) {
+      lastSeenIn = inEl.value;
+      autoFillCheckout();
+    }
+  });
+}
+
+async function submitManualAttendance(prefix) {
+  const date     = document.getElementById(`${prefix}Date`).value;
+  const checkIn  = document.getElementById(`${prefix}In`).value;
+  const checkOut = document.getElementById(`${prefix}Out`).value;
+  const notes    = document.getElementById(`${prefix}Notes`).value;
+  const resultEl = document.getElementById(`${prefix}Result`);
+
+  if (!date || !checkIn || !checkOut) {
+    showToast(t('selectDateTimeAlert'), 'danger');
+    return;
+  }
+
+  resultEl.innerHTML = '';
+  const attendance = { AttendanceDate: date, CheckInTime: checkIn, CheckOutTime: checkOut, Notes: notes };
+  const res = await api('saveMyAttendance', { attendance });
+
+  if (res.needsConfirm) {
+    const ex = res.existing || {};
+    document.getElementById(`${prefix}ExistingInfo`).innerHTML =
+      `${t('checkInTime')}: <strong>${ex.CheckInTime||'—'}</strong> · ${t('checkOutTime')}: <strong>${ex.CheckOutTime||'—'}</strong>`;
+    const modalEl = document.getElementById(`${prefix}ConfirmModal`);
+    const modal = new bootstrap.Modal(modalEl);
+    const confirmBtn = document.getElementById(`${prefix}ConfirmBtn`);
+    confirmBtn.onclick = async () => {
+      modal.hide();
+      const res2 = await api('saveMyAttendance', { attendance, confirmOverwrite: true });
+      handleManualAttendanceResult(res2, prefix, resultEl);
+    };
+    modal.show();
+    return;
+  }
+
+  handleManualAttendanceResult(res, prefix, resultEl);
+}
+
+function handleManualAttendanceResult(res, prefix, resultEl) {
+  if (!res.success) {
+    showToast(res.message, 'danger');
+    return;
+  }
+  showToast(res.message, 'success');
+  const d = res.data;
+  resultEl.innerHTML = `
+    <div class="alert alert-success py-2 mb-0">
+      <div class="row g-2 text-center">
+        <div class="col-6 col-md-4"><div class="small text-secondary">${t('workHours')}</div><div class="fw-bold">${d.WorkHours ? hoursToHM(d.WorkHours) : '—'}</div></div>
+        <div class="col-6 col-md-4"><div class="small text-secondary">${t('delayMins')}</div><div class="fw-bold">${minutesToHM(d.DelayMinutes)}</div></div>
+        <div class="col-6 col-md-4"><div class="small text-secondary">${t('overtimeHours')}</div><div class="fw-bold">${hoursToHM(d.OvertimeHours)}</div></div>
+      </div>
+    </div>`;
+  // Refresh whichever table is currently visible
+  if (document.getElementById('attTableWrapper')) loadMyAttendance();
+}
+
+let MY_ATT_CACHE = [];
+
+async function loadMyAttendance() {
+  const dateFrom = document.getElementById('attFrom')?.value;
+  const dateTo   = document.getElementById('attTo')?.value;
+  const [res, msnRes, permRes] = await Promise.all([
+    api('getAttendance',  { dateFrom, dateTo, myDataOnly: true }),
+    api('getMissions',    { dateFrom, dateTo, myDataOnly: true }),
+    api('getPermissions', { dateFrom, dateTo, myDataOnly: true }),
+  ]);
+  const wrapper = document.getElementById('attTableWrapper');
+  if (!wrapper) return;
+
+  if (!res.success || !res.data.length) {
+    wrapper.innerHTML = `<div class="empty-state"><span class="material-icons-round">event_busy</span><div>${t('noData')}</div></div>`;
+    return;
+  }
+
+  // Dates that have at least one mission/permission — used to flag the columns below.
+  const missionDates = new Set(
+    (msnRes.success ? msnRes.data : []).map(m => String(m.MissionDate).substring(0,10))
+  );
+  const permissionDates = new Set(
+    (permRes.success ? permRes.data : []).map(p => String(p.PermissionDate).substring(0,10))
+  );
+
+  MY_ATT_CACHE = res.data;
+  const rows = res.data.map(a => `
+    <tr>
+      <td>${formatDateAr(a.AttendanceDate)}</td>
+      <td>${a.CheckInTime || '—'}</td>
+      <td>${a.CheckOutTime || '—'}</td>
+      <td>${a.ExpectedCheckOut || '—'}</td>
+      <td>${a.WorkHours ? hoursToHM(a.WorkHours) : '—'}</td>
+      <td>${parseInt(a.DelayMinutes||0) > 0 ? `<span class="badge-status badge-danger">${minutesToHM(a.DelayMinutes)}</span>` : `<span class="badge-status badge-success">${t('noDelayLabel')}</span>`}</td>
+      <td>${parseFloat(a.OvertimeHours||0) > 0 ? `<span class="badge-status badge-info">${hoursToHM(a.OvertimeHours)}</span>` : '—'}</td>
+      <td>${missionDates.has(String(a.AttendanceDate).substring(0,10)) ? `<span class="badge-status badge-info">${t('missions')}</span>` : '—'}</td>
+      <td>${permissionDates.has(String(a.AttendanceDate).substring(0,10)) ? `<span class="badge-status badge-info">${t('permissions')}</span>` : '—'}</td>
+      <td>${a.Notes || ''}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="editMyAttendance('${a.AttendanceID}')">
+          <span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteMyAttendance('${a.AttendanceID}')">
+          <span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  wrapper.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>${t('date')}</th><th>${t('checkInTime')}</th><th>${t('checkOutTime')}</th>
+        <th>${t('expectedCheckOutTime')}</th>
+        <th>${t('workHours')}</th><th>${t('delayMins')}</th>
+        <th>${t('overtimeHours')}</th><th>${t('missions')}</th><th>${t('permissions')}</th><th>${t('notes')}</th><th>${t('actions')}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// Opens the dedicated edit modal, pre-filled with the selected record.
+// The date is locked (it's the record's identity) — only times and notes change.
+function editMyAttendance(attendanceID) {
+  const att = MY_ATT_CACHE.find(a => String(a.AttendanceID).trim() === String(attendanceID).trim());
+  if (!att) {
+    showToast(APP.lang==='ar' ? 'تعذر العثور على السجل' : 'Could not find the record', 'danger');
+    return;
+  }
+  document.getElementById('eatID').value    = att.AttendanceID;
+  document.getElementById('eatDate').value  = att.AttendanceDate;
+  document.getElementById('eatIn').value    = att.CheckInTime  || '';
+  document.getElementById('eatOut').value   = att.CheckOutTime || '';
+  document.getElementById('eatNotes').value = att.Notes || '';
+  new bootstrap.Modal(document.getElementById('editAttModal')).show();
+}
+
+async function submitEditAttendance() {
+  const attendanceID = document.getElementById('eatID').value;
+  const date          = document.getElementById('eatDate').value;
+  const checkIn        = document.getElementById('eatIn').value;
+  const checkOut        = document.getElementById('eatOut').value;
+  const notes            = document.getElementById('eatNotes').value;
+
+  if (!checkIn || !checkOut) {
+    showToast(t('selectDateTimeAlert'), 'danger');
+    return;
+  }
+
+  const attendance = { AttendanceDate: date, CheckInTime: checkIn, CheckOutTime: checkOut, Notes: notes };
+  // Editing an existing record always goes through confirmOverwrite directly —
+  // the user already explicitly chose to edit this specific record via the
+  // pencil icon, so no extra "record exists" prompt is needed here.
+  const res = await api('saveMyAttendance', { attendance, confirmOverwrite: true });
+
+  if (!res.success) {
+    showToast(res.message, 'danger');
+    return;
+  }
+
+  showToast(res.message, 'success');
+  bootstrap.Modal.getInstance(document.getElementById('editAttModal'))?.hide();
+  loadMyAttendance();
+}
+
+async function deleteMyAttendance(attendanceID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteMyAttendance', { attendanceID });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) loadMyAttendance();
+}
+
+// ── My Balance ────────────────────────────────────────────────
+async function renderMyBalance() {
+  const container = document.getElementById('pageContent');
+  const currentYear = new Date().getFullYear();
+  const yearOpts = [currentYear+1, currentYear, currentYear-1, currentYear-2]
+    .map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('myBalance')}</div></div></div>
+
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-3"><label class="form-label">${t('year')}</label>
+        <select class="form-select" id="mBalYear">${yearOpts}</select></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" onclick="loadMyBalance()">
+        <span class="material-icons-round">search</span>${t('filter')}</button></div>
+    </div>
+
+    <div class="card"><div class="data-table-wrapper" id="mBalTableWrapper">
+      <div class="empty-state"><span class="material-icons-round">account_balance_wallet</span><div>${t('loading')}</div></div>
+    </div></div>`;
+
+  await loadMyBalance();
+}
+
+async function loadMyBalance() {
+  const year = document.getElementById('mBalYear')?.value || new Date().getFullYear().toString();
+
+  const res = await api('getEmployeeLeaveBalance', { year });
+  const data = res.success ? res.data : [];
+  const wrapper = document.getElementById('mBalTableWrapper');
+  if (!wrapper) return;
+
+  if (!data.length) {
+    wrapper.innerHTML = `<div class="empty-state"><span class="material-icons-round">account_balance_wallet</span><div>${t('noData')}</div></div>`;
+    return;
+  }
+
+  const rows = data.map(b => `
+    <tr>
+      <td>${APP.lang==='ar' ? b.LeaveNameAr : b.LeaveNameEn}</td>
+      <td class="text-center fw-bold">${b.BalanceDays}</td>
+      <td class="text-center text-danger">${b.ConsumedDays}</td>
+      <td class="text-center fw-bold" style="color:var(--success)">${b.RemainingDays}</td>
+      <td>
+        <div class="progress" style="height:8px;border-radius:4px;background:var(--border)">
+          <div class="progress-bar" style="width:${b.BalanceDays>0?(b.ConsumedDays/b.BalanceDays*100):0}%;background:var(--primary);border-radius:4px"></div>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  wrapper.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>${t('leaveType')}</th><th class="text-center">${t('balance')}</th>
+        <th class="text-center">${t('consumed')}</th><th class="text-center">${t('remaining')}</th>
+        <th style="min-width:120px">${t('consumption')}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── My Leaves ─────────────────────────────────────────────────
+let MY_LV_TYPEMAP = {};
+let MY_LV_BALANCE = [];
+
+async function renderMyLeaves() {
+  const container = document.getElementById('pageContent');
+  const [typesRes, balRes, defaultPeriod] = await Promise.all([
+    api('getLeaveTypes', { activeOnly: true }),
+    api('getEmployeeLeaveBalance', { year: new Date().getFullYear().toString() }),
+    getDefaultDateRange(),
+  ]);
+  const types = typesRes.success ? typesRes.data : [];
+  MY_LV_BALANCE = balRes.success ? balRes.data : [];
+  const typeOpts = types.map(lt =>
+    `<option value="${lt.LeaveTypeID}">${APP.lang==='ar' ? lt.LeaveNameAr : lt.LeaveNameEn}</option>`).join('');
+  MY_LV_TYPEMAP = {};
+  types.forEach(t => { MY_LV_TYPEMAP[t.LeaveTypeID] = APP.lang==='ar' ? t.LeaveNameAr : t.LeaveNameEn; });
+
+  const { from: defaultFrom, to: defaultTo } = defaultPeriod;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('myLeaves')}</div></div>
+      <button class="btn btn-primary" onclick="openLeaveModal()">
+        <span class="material-icons-round">add</span>${t('add')}
+      </button>
+    </div>
+
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-3"><label class="form-label">${t('dateFrom')}</label>
+        <input type="date" class="form-control" id="mlvFrom" value="${defaultFrom}"></div>
+      <div class="col-md-3"><label class="form-label">${t('dateTo')}</label>
+        <input type="date" class="form-control" id="mlvTo" value="${defaultTo}"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" onclick="loadMyLeaves()">
+        <span class="material-icons-round">search</span>${t('filter')}</button></div>
+    </div>
+
+    <div class="card"><div class="data-table-wrapper" id="mlvTableWrapper">
+      <div class="empty-state"><span class="material-icons-round">beach_access</span><div>${t('loading')}</div></div>
+    </div></div>
+
+    <!-- Add Leave Modal -->
+    <div class="modal fade" id="leaveModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title" id="leaveModalTitle">${t('addLeave')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <input type="hidden" id="lvID">
+            <div class="mb-3"><label class="form-label">${t('leaveType')}</label>
+              <select class="form-select" id="lvType"><option value="">${t('selectOption')}</option>${typeOpts}</select></div>
+            <div class="row g-3">
+              <div class="col-6"><label class="form-label">${t('from')}</label>
+                <input type="date" class="form-control" id="lvFrom"></div>
+              <div class="col-6"><label class="form-label">${t('to')}</label>
+                <input type="date" class="form-control" id="lvTo"></div>
+            </div>
+            <div class="mt-3"><label class="form-label">${t('notes')}</label>
+              <textarea class="form-control" id="lvNotes" rows="2"></textarea></div>
+            <div class="mt-3 alert alert-info py-2 small" id="lvBalanceInfo"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+            <button class="btn btn-primary" onclick="submitLeave()">${t('save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Show balance on type change
+  document.getElementById('lvType')?.addEventListener('change', function() {
+    const bal = MY_LV_BALANCE.find(b => b.LeaveTypeID === this.value);
+    const el  = document.getElementById('lvBalanceInfo');
+    if (bal && el) el.textContent = `${t('availableBalance')}: ${bal.RemainingDays} ${t('dayWord')}`;
+  });
+
+  await loadMyLeaves();
+}
+
+async function loadMyLeaves() {
+  const dateFrom = document.getElementById('mlvFrom')?.value;
+  const dateTo   = document.getElementById('mlvTo')?.value;
+  const res = await api('getLeaveTransactions', { dateFrom, dateTo, myDataOnly: true });
+  const leaves = res.success ? res.data : [];
+  const typeMap = MY_LV_TYPEMAP;
+  const wrapper = document.getElementById('mlvTableWrapper');
+  if (!wrapper) return;
+
+  MY_LV_CACHE = leaves;
+  if (!leaves.length) {
+    wrapper.innerHTML = `<div class="empty-state"><span class="material-icons-round">beach_access</span><div>${t('noData')}</div></div>`;
+    return;
+  }
+
+  const rows = leaves.map(l => `
+    <tr>
+      <td>${typeMap[l.LeaveTypeID] || l.LeaveTypeID}</td>
+      <td>${formatDateAr(l.FromDate)}</td>
+      <td>${formatDateAr(l.ToDate)}</td>
+      <td class="text-center"><span class="badge-status badge-info">${l.DaysCount} ${t('dayWord')}</span></td>
+      <td>${l.Notes || ''}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openLeaveModal('${l.LeaveID}')">
+          <span class="material-icons-round">edit</span>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteLeave('${l.LeaveID}')">
+          <span class="material-icons-round">delete</span>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  wrapper.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>${t('leaveType')}</th><th>${t('from')}</th><th>${t('to')}</th><th class="text-center">${t('days')}</th><th>${t('notes')}</th><th>${t('actions')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+let MY_LV_CACHE = [];
+
+function openLeaveModal(leaveID) {
+  const leave = leaveID ? MY_LV_CACHE.find(l => l.LeaveID === leaveID) : null;
+  document.getElementById('lvID').value    = leave ? leave.LeaveID      : '';
+  document.getElementById('lvType').value  = leave ? leave.LeaveTypeID  : '';
+  document.getElementById('lvFrom').value  = leave ? leave.FromDate     : '';
+  document.getElementById('lvTo').value    = leave ? leave.ToDate       : '';
+  document.getElementById('lvNotes').value = leave ? (leave.Notes||'')  : '';
+  document.getElementById('lvBalanceInfo').textContent = '';
+  document.getElementById('leaveModalTitle').textContent = leave ? t('editLeave') : t('addLeave');
+  new bootstrap.Modal(document.getElementById('leaveModal')).show();
+}
+
+async function submitLeave() {
+  const leaveID = document.getElementById('lvID').value;
+  const leave = {
+    LeaveID:      leaveID || undefined,
+    EmployeeCode: APP.session.employeeCode,
+    LeaveTypeID:  document.getElementById('lvType').value,
+    FromDate:     document.getElementById('lvFrom').value,
+    ToDate:       document.getElementById('lvTo').value,
+    Notes:        document.getElementById('lvNotes').value,
+  };
+  if (!leave.LeaveTypeID || !leave.FromDate || !leave.ToDate) {
+    showToast(t('requiredFields'), 'danger'); return;
+  }
+  const res = await api('saveLeaveTransaction', { leave });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('leaveModal'))?.hide();
+    renderMyLeaves();
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function deleteLeave(leaveID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteLeaveTransaction', { leaveID });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderMyLeaves();
+}
+
+// ── My Missions ───────────────────────────────────────────────
+async function renderMyMissions() {
+  const container = document.getElementById('pageContent');
+  const [typesRes, defaultPeriod] = await Promise.all([
+    api('getMissionTypes', { activeOnly: true }),
+    getDefaultDateRange(),
+  ]);
+  const types    = typesRes.success ? typesRes.data : [];
+  MY_MSN_TYPEMAP  = {};
+  types.forEach(t => { MY_MSN_TYPEMAP[t.MissionTypeID] = APP.lang==='ar' ? t.MissionNameAr : t.MissionNameEn; });
+  const typeOpts = types.map(t => `<option value="${t.MissionTypeID}">${APP.lang==='ar'?t.MissionNameAr:t.MissionNameEn}</option>`).join('');
+  const { from: defaultFrom, to: defaultTo } = defaultPeriod;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('myMissions')}</div></div>
+      <button class="btn btn-primary" onclick="openMissionModal()">
+        <span class="material-icons-round">add</span>${t('add')}</button>
+    </div>
+
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-3"><label class="form-label">${t('dateFrom')}</label>
+        <input type="date" class="form-control" id="mmsFrom" value="${defaultFrom}"></div>
+      <div class="col-md-3"><label class="form-label">${t('dateTo')}</label>
+        <input type="date" class="form-control" id="mmsTo" value="${defaultTo}"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" onclick="loadMyMissions()">
+        <span class="material-icons-round">search</span>${t('filter')}</button></div>
+    </div>
+
+    <div class="card"><div class="data-table-wrapper" id="mmsTableWrapper">
+      <div class="empty-state"><span class="material-icons-round">directions_car</span><div>${t('loading')}</div></div>
+    </div></div>
+    <div class="modal fade" id="msnModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="msnModalTitle">${t('addMission')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="msnID">
+          <div class="alert alert-info py-2 small mb-3" id="msnBalanceInfo">${t('loading')}</div>
+          <div class="mb-3"><label class="form-label">${t('missionType')}</label>
+            <select class="form-select" id="msnType"><option value="">${t('selectOption')}</option>${typeOpts}</select></div>
+          <div class="mb-3"><label class="form-label">${t('date')}</label>
+            <input type="date" class="form-control" id="msnDate"></div>
+          <div class="row g-3">
+            <div class="col-6"><label class="form-label">${t('from')}</label>
+              <input type="time" class="form-control" id="msnFrom"></div>
+            <div class="col-6"><label class="form-label">${t('to')}</label>
+              <input type="time" class="form-control" id="msnTo"></div>
+          </div>
+          <div class="mt-3"><label class="form-label">${t('notes')}</label>
+            <textarea class="form-control" id="msnNotes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitMission()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+
+  await loadMyMissions();
+}
+
+let MY_MSN_TYPEMAP = {};
+
+async function loadMyMissions() {
+  const dateFrom = document.getElementById('mmsFrom')?.value;
+  const dateTo   = document.getElementById('mmsTo')?.value;
+  const res = await api('getMissions', { dateFrom, dateTo, myDataOnly: true });
+  const missions = res.success ? res.data : [];
+  const typeMap  = MY_MSN_TYPEMAP;
+  const wrapper  = document.getElementById('mmsTableWrapper');
+  if (!wrapper) return;
+
+  MY_MSN_CACHE = missions;
+  if (!missions.length) {
+    wrapper.innerHTML = `<div class="empty-state"><span class="material-icons-round">directions_car</span><div>${t('noData')}</div></div>`;
+    return;
+  }
+
+  const rows = missions.map(m => `
+    <tr>
+      <td>${typeMap[m.MissionTypeID] || m.MissionTypeID}</td>
+      <td>${formatDateAr(m.MissionDate)}</td>
+      <td>${m.FromTime}</td><td>${m.ToTime}</td>
+      <td class="text-center"><span class="badge-status badge-info">${hoursToHM(m.DurationHours)}</span></td>
+      <td>${m.Notes || ''}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openMissionModal('${m.MissionID}')">
+          <span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteMission('${m.MissionID}')">
+          <span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  wrapper.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>${t('missionType')}</th><th>${t('date')}</th><th>${t('from')}</th><th>${t('to')}</th><th class="text-center">${t('hours')}</th><th>${t('notes')}</th><th>${t('actions')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+let MY_MSN_CACHE = [];
+
+async function openMissionModal(missionID) {
+  const mission = missionID ? MY_MSN_CACHE.find(m => m.MissionID === missionID) : null;
+  document.getElementById('msnID').value    = mission ? mission.MissionID     : '';
+  document.getElementById('msnType').value  = mission ? mission.MissionTypeID : '';
+  document.getElementById('msnDate').value  = mission ? mission.MissionDate   : '';
+  document.getElementById('msnFrom').value  = mission ? mission.FromTime      : '';
+  document.getElementById('msnTo').value    = mission ? mission.ToTime        : '';
+  document.getElementById('msnNotes').value = mission ? (mission.Notes||'')   : '';
+  document.getElementById('msnModalTitle').textContent = mission ? t('editMission') : t('addMission');
+  new bootstrap.Modal(document.getElementById('msnModal')).show();
+
+  const balEl = document.getElementById('msnBalanceInfo');
+  balEl.textContent = t('loading');
+  const res = await api('getEmployeeOvertimeBalance', {});
+  if (res.success) {
+    const r = res.data;
+    balEl.innerHTML = `${t('remainingLabel')}: <strong>${hoursToHM(r.remaining)}</strong>
+      <span class="text-secondary">(${t('totalOvertimeEarned')}: ${hoursToHM(r.totalOvertime)} − ${t('totalMissionHours')}: ${hoursToHM(r.totalMissions)})</span>`;
+  } else {
+    balEl.textContent = '';
+  }
+}
+
+async function submitMission() {
+  const missionID = document.getElementById('msnID').value;
+  const mission = {
+    MissionID:     missionID || undefined,
+    EmployeeCode:  APP.session.employeeCode,
+    MissionTypeID: document.getElementById('msnType').value,
+    MissionDate:   document.getElementById('msnDate').value,
+    FromTime:      document.getElementById('msnFrom').value,
+    ToTime:        document.getElementById('msnTo').value,
+    Notes:         document.getElementById('msnNotes').value,
+  };
+  if (!mission.MissionTypeID || !mission.MissionDate || !mission.FromTime || !mission.ToTime) {
+    showToast(t('requiredFields'), 'danger'); return;
+  }
+  const res = await api('saveMission', { mission });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('msnModal'))?.hide();
+    renderMyMissions();
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function deleteMission(missionID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteMission', { missionID });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderMyMissions();
+}
+
+// ── My Permissions ────────────────────────────────────────────
+async function renderMyPermissions() {
+  const container = document.getElementById('pageContent');
+  const [permRes, settingsRes, period] = await Promise.all([
+    api('getPermissions', { myDataOnly: true }),
+    api('getSettings', {}),
+    getDefaultDateRange(),
+  ]);
+  const perms = permRes.success ? permRes.data : [];
+  const monthlyLimit = settingsRes.success ? parseFloat(settingsRes.data.MonthlyPermissionHours || 2) : 2;
+
+  // Current payroll-cycle usage (e.g. 20th of last month → 19th of this month,
+  // per Settings → Payroll Cycle Start Day) — NOT the calendar month, since
+  // the "once a month" / hour-limit rules follow the payroll cycle everywhere else.
+  // This balance box always reflects the CURRENT cycle, independent of whatever
+  // date range is chosen in the filter below (that filter only affects the list).
+  const { from: periodFrom, to: periodTo } = period;
+  const monthPerms = perms.filter(p => String(p.PermissionDate) >= periodFrom && String(p.PermissionDate) <= periodTo);
+  const usedHours  = monthPerms.reduce((s, p) => s + parseFloat(p.DurationHours || 0), 0);
+  const remainingHours = Math.max(0, monthlyLimit - usedHours);
+  const canAddNew  = monthPerms.length === 0; // one permission per payroll cycle rule
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-header-title">${t('myPermissions')}</div>
+        <div class="page-header-sub">${t('monthlyLimitNote')}: ${monthlyLimit} ${t('hours')} — ${t('oncePerMonthNote')}</div>
+      </div>
+      <button class="btn btn-primary" ${canAddNew ? `onclick="openPermModal()"` : `disabled title="${t('permissionUsedTitle')}"`}>
+        <span class="material-icons-round">add</span>${t('add')}</button>
+    </div>
+
+    <!-- Monthly balance indicator (always the current payroll cycle) -->
+    <div class="card mb-3 p-3">
+      <div class="row align-items-center g-3">
+        <div class="col-md-4 text-center">
+          <div class="small text-secondary mb-1">${t('monthlyBalanceLabel')}</div>
+          <div class="fw-bold fs-4" style="color:var(--primary)">${monthlyLimit} ${t('hours')}</div>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="small text-secondary mb-1">${t('usedThisMonthLabel')}</div>
+          <div class="fw-bold fs-4 text-danger">${usedHours.toFixed(2)} ${t('hours')}</div>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="small text-secondary mb-1">${t('remainingLabel')}</div>
+          <div class="fw-bold fs-4" style="color:${remainingHours>0?'#10b981':'#ef4444'}">${remainingHours.toFixed(2)} ${t('hours')}</div>
+        </div>
+      </div>
+      <div class="progress mt-2" style="height:8px;border-radius:4px;background:var(--border)">
+        <div class="progress-bar" style="width:${monthlyLimit>0?(usedHours/monthlyLimit*100):0}%;background:${remainingHours>0?'var(--primary)':'#ef4444'};border-radius:4px"></div>
+      </div>
+      ${!canAddNew ? `<div class="alert alert-warning py-2 small mt-3 mb-0">
+        <span class="material-icons-round" style="font-size:15px;vertical-align:middle">info</span>
+        ${t('permissionUsedThisMonth')}
+      </div>` : ''}
+    </div>
+
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-3"><label class="form-label">${t('dateFrom')}</label>
+        <input type="date" class="form-control" id="mprFrom" value="${periodFrom}"></div>
+      <div class="col-md-3"><label class="form-label">${t('dateTo')}</label>
+        <input type="date" class="form-control" id="mprTo" value="${periodTo}"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" onclick="loadMyPermissionsList()">
+        <span class="material-icons-round">search</span>${t('filter')}</button></div>
+    </div>
+
+    <div class="card"><div class="data-table-wrapper" id="permTableWrapper">
+      <div class="empty-state"><span class="material-icons-round">door_open</span><div>${t('loading')}</div></div>
+    </div></div>
+    <div class="modal fade" id="permModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="permModalTitle">${t('addPermission')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="permID">
+          <div class="alert alert-warning py-2 small">${t('monthlyLimitNote')} ${monthlyLimit} ${t('hours')} — ${t('oncePerMonthNote')}</div>
+          <div class="mb-3"><label class="form-label">${t('date')}</label>
+            <input type="date" class="form-control" id="permDate"></div>
+          <div class="row g-3">
+            <div class="col-6"><label class="form-label">${t('from')}</label>
+              <input type="time" class="form-control" id="permFrom"></div>
+            <div class="col-6"><label class="form-label">${t('to')}</label>
+              <input type="time" class="form-control" id="permTo"></div>
+          </div>
+          <div class="mt-3"><label class="form-label">${t('notes')}</label>
+            <textarea class="form-control" id="permNotes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitPerm()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+
+  await loadMyPermissionsList();
+}
+
+let MY_PERM_CACHE = [];
+
+async function loadMyPermissionsList() {
+  const dateFrom = document.getElementById('mprFrom')?.value;
+  const dateTo   = document.getElementById('mprTo')?.value;
+  const res = await api('getPermissions', { dateFrom, dateTo, myDataOnly: true });
+  const perms = res.success ? res.data : [];
+  const wrapper = document.getElementById('permTableWrapper');
+  if (!wrapper) return;
+
+  MY_PERM_CACHE = perms;
+  if (!perms.length) {
+    wrapper.innerHTML = `<div class="empty-state"><span class="material-icons-round">door_open</span><div>${t('noData')}</div></div>`;
+    return;
+  }
+
+  const rows = perms.map(p => `
+    <tr>
+      <td>${formatDateAr(p.PermissionDate)}</td>
+      <td>${p.FromTime}</td><td>${p.ToTime}</td>
+      <td class="text-center"><span class="badge-status badge-info">${hoursToHM(p.DurationHours)}</span></td>
+      <td>${p.Notes || ''}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openPermModal('${p.PermissionID}')">
+          <span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deletePerm('${p.PermissionID}')">
+          <span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  wrapper.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>${t('date')}</th><th>${t('from')}</th><th>${t('to')}</th><th class="text-center">${t('hours')}</th><th>${t('notes')}</th><th>${t('actions')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function openPermModal(permissionID) {
+  const perm = permissionID ? MY_PERM_CACHE.find(p => p.PermissionID === permissionID) : null;
+  document.getElementById('permID').value    = perm ? perm.PermissionID   : '';
+  document.getElementById('permDate').value  = perm ? perm.PermissionDate : '';
+  document.getElementById('permFrom').value  = perm ? perm.FromTime       : '';
+  document.getElementById('permTo').value    = perm ? perm.ToTime         : '';
+  document.getElementById('permNotes').value = perm ? (perm.Notes||'')    : '';
+  document.getElementById('permModalTitle').textContent = perm ? t('editPermission') : t('addPermission');
+  new bootstrap.Modal(document.getElementById('permModal')).show();
+}
+
+async function submitPerm() {
+  const permID = document.getElementById('permID').value;
+  const permission = {
+    PermissionID:   permID || undefined,
+    EmployeeCode:   APP.session.employeeCode,
+    PermissionDate: document.getElementById('permDate').value,
+    FromTime:       document.getElementById('permFrom').value,
+    ToTime:         document.getElementById('permTo').value,
+    Notes:          document.getElementById('permNotes').value,
+  };
+  if (!permission.PermissionDate || !permission.FromTime || !permission.ToTime) {
+    showToast(t('requiredFields'), 'danger'); return;
+  }
+  const res = await api('savePermission', { permission });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('permModal'))?.hide();
+    renderMyPermissions();
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function deletePerm(permissionID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deletePermission', { permissionID });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderMyPermissions();
+}
+
+// ── My Reports (Employee self-service: 3 reports) ──────────────
+async function renderMyReports() {
+  const container = document.getElementById('pageContent');
+  const { from: defaultFrom, to: defaultTo } = await getDefaultDateRange();
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-header-title">${t('myReports')}</div>
+        <div class="page-header-sub">${APP.session.nameAr || APP.session.employeeCode}</div>
+      </div>
+    </div>
+
+    <div class="filter-bar row g-2 align-items-end mb-4">
+      <div class="col-md-4"><label class="form-label">${t('dateFrom')}</label>
+        <input type="date" class="form-control" id="myRptFrom" value="${defaultFrom}"></div>
+      <div class="col-md-4"><label class="form-label">${t('dateTo')}</label>
+        <input type="date" class="form-control" id="myRptTo" value="${defaultTo}"></div>
+      <div class="col-md-4"><button class="btn btn-primary w-100" onclick="loadMyReports()">
+        <span class="material-icons-round">search</span>${t('generate')}</button></div>
+    </div>
+
+    <!-- Report 1: Attendance -->
+    <div class="card mb-4">
+      <div class="card-header px-3 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-bold"><span class="material-icons-round" style="vertical-align:middle;font-size:18px;color:var(--primary)">fact_check</span> ${t('attendanceReport')}</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="exportMyReport('attendance')">
+          <span class="material-icons-round">download</span>${t('exportToExcel')}</button>
+      </div>
+      <div class="data-table-wrapper" id="myRptAttendance">
+        <div class="empty-state py-4"><span class="material-icons-round">hourglass_empty</span><div>${t('loading')}</div></div>
+      </div>
+    </div>
+
+    <!-- Report 2: Overtime vs Missions -->
+    <div class="card mb-4">
+      <div class="card-header px-3 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-bold"><span class="material-icons-round" style="vertical-align:middle;font-size:18px;color:var(--accent)">timer</span> ${t('overtimeMissionReport')}</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="exportMyReport('overtimeMission')">
+          <span class="material-icons-round">download</span>${t('exportToExcel')}</button>
+      </div>
+      <div id="myRptOvertimeSummary" class="p-3"></div>
+    </div>
+
+    <!-- Report 3: Leaves / Permissions / Missions -->
+    <div class="card mb-4">
+      <div class="card-header px-3 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-bold"><span class="material-icons-round" style="vertical-align:middle;font-size:18px;color:#8b5cf6">event_note</span> ${t('leaveMissionPermReport')}</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="exportMyReport('leaveMissionPerm')">
+          <span class="material-icons-round">download</span>${t('exportToExcel')}</button>
+      </div>
+      <div class="px-3 pt-3">
+        <label class="form-label">${t('reportType')}</label>
+        <select class="form-select form-select-sm" id="myRpt3TypeFilter" style="max-width:260px" onchange="renderCombinedReport()">
+          <option value="all">${t('allTime')==='All Time'?'All':'الكل'}</option>
+          <option value="leaves">${t('leaves')}</option>
+          <option value="permissions">${t('permissions')}</option>
+          <option value="missions">${t('missions')}</option>
+        </select>
+      </div>
+      <div class="data-table-wrapper" id="myRptCombined">
+        <div class="empty-state py-4"><span class="material-icons-round">hourglass_empty</span><div>${t('loading')}</div></div>
+      </div>
+    </div>`;
+
+  await loadMyReports();
+}
+
+// Cache for export (avoids re-fetching when exporting)
+const MY_RPT_CACHE = { attendance: [], overtime: null, leaves: [], missions: [], permissions: [], ltMap: {}, mtMap: {} };
+
+async function loadMyReports() {
+  showTableLoader('myRptAttendance');
+  showTableLoader('myRptCombined');
+  const ovtEl = document.getElementById('myRptOvertimeSummary');
+  if (ovtEl) ovtEl.innerHTML = `
+    <div class="d-flex justify-content-center align-items-center py-4">
+      <div class="loader-spinner" style="border-top-color:var(--primary);border-color:var(--border);width:36px;height:36px"></div>
+    </div>`;
+
+  const dateFrom = document.getElementById('myRptFrom')?.value;
+  const dateTo   = document.getElementById('myRptTo')?.value;
+
+  const [attRes, missionsRes, leavesRes, permsRes, allTimeAttRes, allTimeMsnRes] = await Promise.all([
+    api('getAttendance',        { dateFrom, dateTo, myDataOnly: true }),
+    api('getMissions',          { dateFrom, dateTo, myDataOnly: true }),
+    api('getLeaveTransactions', { dateFrom, dateTo, myDataOnly: true }),
+    api('getPermissions',       { dateFrom, dateTo, myDataOnly: true }),
+    // The Overtime/Mission balance below is a running, all-time total — it
+    // must NOT be scoped to the date range picked for the daily attendance
+    // log, so it's fetched separately with no date filter at all.
+    api('getAttendance',        { myDataOnly: true }),
+    api('getMissions',          { myDataOnly: true }),
+  ]);
+
+  const attendance  = attRes.success      ? attRes.data      : [];
+  const missions    = missionsRes.success ? missionsRes.data : [];
+  const leaves      = leavesRes.success   ? leavesRes.data   : [];
+  const permissions = permsRes.success    ? permsRes.data    : [];
+  const allTimeAttendance = allTimeAttRes.success ? allTimeAttRes.data : [];
+  const allTimeMissions   = allTimeMsnRes.success ? allTimeMsnRes.data : [];
+
+  MY_RPT_CACHE.attendance  = attendance;
+  MY_RPT_CACHE.missions    = missions;
+  MY_RPT_CACHE.leaves      = leaves;
+  MY_RPT_CACHE.permissions = permissions;
+
+  // ── Report 1: Attendance ──
+  const attSorted = [...attendance].sort((a,b) => a.AttendanceDate > b.AttendanceDate ? -1 : 1);
+  const attWrapper = document.getElementById('myRptAttendance');
+  if (attSorted.length) {
+    const dayNames = t('dayNamesAr').split(',');
+    // Dates that have at least one mission/permission — used to flag the columns below.
+    const rptMissionDates = new Set(missions.map(m => String(m.MissionDate).substring(0,10)));
+    const rptPermissionDates = new Set(permissions.map(p => String(p.PermissionDate).substring(0,10)));
+    const rows = attSorted.map(a => {
+      const d = new Date(a.AttendanceDate);
+      const dayName = isNaN(d) ? '' : dayNames[d.getDay()];
+      return `
+      <tr>
+        <td>${dayName}</td>
+        <td>${formatDateAr(a.AttendanceDate)}</td>
+        <td>${a.CheckInTime || '—'}</td>
+        <td>${a.CheckOutTime || '—'}</td>
+        <td>${a.ExpectedCheckOut || '—'}</td>
+        <td>${parseInt(a.DelayMinutes||0) > 0 ? `<span class="badge-status badge-danger">${minutesToHM(a.DelayMinutes)}</span>` : `<span class="badge-status badge-success">—</span>`}</td>
+        <td>${parseFloat(a.OvertimeHours||0) > 0 ? `<span class="badge-status badge-info">${hoursToHM(a.OvertimeHours)}</span>` : '—'}</td>
+        <td>${rptMissionDates.has(String(a.AttendanceDate).substring(0,10)) ? `<span class="badge-status badge-info">${t('missions')}</span>` : '—'}</td>
+        <td>${rptPermissionDates.has(String(a.AttendanceDate).substring(0,10)) ? `<span class="badge-status badge-info">${t('permissions')}</span>` : '—'}</td>
+      </tr>`;
+    }).join('');
+    attWrapper.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>${t('dayWordHeader')}</th><th>${t('date')}</th>
+          <th>${t('checkInTime')}</th><th>${t('checkOutTime')}</th>
+          <th>${t('expectedCheckOutTime')}</th>
+          <th>${t('delayMins')}</th><th>${t('overtimeHours')}</th><th>${t('missions')}</th><th>${t('permissions')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else {
+    attWrapper.innerHTML = `<div class="empty-state py-4"><span class="material-icons-round">event_busy</span><div>${t('noData')}</div></div>`;
+  }
+
+  // ── Report 2: Overtime vs Missions — cumulative, all-time balance ──
+  const totalOvertime = allTimeAttendance.reduce((s,a) => s + parseFloat(a.OvertimeHours||0), 0);
+  // Only "Work Hours Mission" (MT001) and "Work Day Mission" (MT002) draw
+  // down the overtime balance — other mission types don't affect it. Kept
+  // consistent with the same rule applied server-side (isOvertimeDeductibleMission).
+  const totalMissions  = allTimeMissions
+    .filter(m => m.MissionTypeID === 'MT001' || m.MissionTypeID === 'MT002')
+    .reduce((s,m) => s + parseFloat(m.DurationHours||0), 0);
+  const netRemaining    = totalOvertime - totalMissions;
+  MY_RPT_CACHE.overtime = { totalOvertime, totalMissions, netRemaining };
+
+  document.getElementById('myRptOvertimeSummary').innerHTML = `
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.1)"><span class="material-icons-round" style="color:#f59e0b">more_time</span></div>
+          <div><div class="stat-value">${hoursToHM(totalOvertime)}</div><div class="stat-label">${t('totalOvertimeEarned')}</div></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(100,116,139,0.1)"><span class="material-icons-round" style="color:#64748b">directions_car</span></div>
+          <div><div class="stat-value">${hoursToHM(totalMissions)}</div><div class="stat-label">${t('totalMissionHours')}</div></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:${netRemaining>=0?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)'}">
+            <span class="material-icons-round" style="color:${netRemaining>=0?'#10b981':'#ef4444'}">account_balance</span></div>
+          <div><div class="stat-value" style="color:${netRemaining>=0?'#10b981':'#ef4444'}">${hoursToHM(netRemaining)}</div><div class="stat-label">${t('netOvertimeRemaining')}</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="alert ${netRemaining>=0?'alert-success':'alert-danger'} mt-3 mb-0 py-2 small">
+      ${hoursToHM(totalOvertime)} ${t('totalOvertimeEarned')} − ${hoursToHM(totalMissions)} ${t('totalMissionHours')}
+      = <strong>${hoursToHM(netRemaining)}</strong>
+    </div>
+    ${(() => {
+      const otDays = allTimeAttendance
+        .filter(a => parseFloat(a.OvertimeHours||0) > 0)
+        .sort((a,b) => a.AttendanceDate > b.AttendanceDate ? -1 : 1);
+      if (!otDays.length) return '';
+      return `
+      <div class="mt-3">
+        <div class="small fw-bold text-secondary mb-2">${t('overtimeDaysReview')}</div>
+        <div class="data-table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>${t('date')}</th><th>${t('checkInTime')}</th><th>${t('checkOutTime')}</th><th class="text-center">${t('overtimeHours')}</th></tr></thead>
+          <tbody>
+            ${otDays.map(a => `
+              <tr>
+                <td>${formatDateAr(a.AttendanceDate)}</td>
+                <td>${a.CheckInTime||'—'}</td>
+                <td>${a.CheckOutTime||'—'}</td>
+                <td class="text-center"><span class="badge-status badge-info">${hoursToHM(a.OvertimeHours)}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>`;
+    })()}`;
+
+  // ── Report 3: Leaves + Permissions + Missions combined timeline ──
+  const [ltRes, mtRes] = await Promise.all([
+    api('getLeaveTypes', {}),
+    api('getMissionTypes', {}),
+  ]);
+  MY_RPT_CACHE.ltMap = {}; (ltRes.success?ltRes.data:[]).forEach(l => { MY_RPT_CACHE.ltMap[l.LeaveTypeID] = APP.lang==='ar'?l.LeaveNameAr:l.LeaveNameEn; });
+  MY_RPT_CACHE.mtMap = {}; (mtRes.success?mtRes.data:[]).forEach(m => { MY_RPT_CACHE.mtMap[m.MissionTypeID] = APP.lang==='ar'?m.MissionNameAr:m.MissionNameEn; });
+
+  renderCombinedReport();
+}
+
+function renderCombinedReport() {
+  const filterVal = document.getElementById('myRpt3TypeFilter')?.value || 'all';
+  const { leaves, permissions, missions, ltMap, mtMap } = MY_RPT_CACHE;
+
+  let combined = [
+    ...leaves.map(l => ({ kind:'leaves', type: t('leaves'), badge:'badge-info',    detail: ltMap[l.LeaveTypeID]||l.LeaveTypeID, date: `${formatDateAr(l.FromDate)} → ${formatDateAr(l.ToDate)}`, value: `${l.DaysCount} ${t('days')}`, sortDate: l.FromDate })),
+    ...permissions.map(p => ({ kind:'permissions', type: t('permissions'), badge:'badge-warning', detail: `${p.FromTime} - ${p.ToTime}`, date: formatDateAr(p.PermissionDate), value: hoursToHM(p.DurationHours), sortDate: p.PermissionDate })),
+    ...missions.map(m => ({ kind:'missions', type: t('missions'), badge:'badge-secondary', detail: mtMap[m.MissionTypeID]||m.MissionTypeID, date: formatDateAr(m.MissionDate), value: hoursToHM(m.DurationHours), sortDate: m.MissionDate })),
+  ].sort((a,b) => a.sortDate > b.sortDate ? -1 : 1);
+
+  if (filterVal !== 'all') {
+    combined = combined.filter(c => c.kind === filterVal);
+  }
+
+  const combinedWrapper = document.getElementById('myRptCombined');
+  if (combined.length) {
+    const rows = combined.map(c => `
+      <tr>
+        <td><span class="badge-status ${c.badge}">${c.type}</span></td>
+        <td>${c.date}</td>
+        <td>${c.detail}</td>
+        <td class="text-center fw-bold">${c.value}</td>
+      </tr>`).join('');
+    combinedWrapper.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>${t('reportType')}</th><th>${t('date')}</th><th>${t('details')}</th><th class="text-center">${t('hours')}/${t('days')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else {
+    combinedWrapper.innerHTML = `<div class="empty-state py-4"><span class="material-icons-round">event_note</span><div>${t('noData')}</div></div>`;
+  }
+}
+
+function exportMyReport(which) {
+  const emp = APP.session.employeeCode;
+  if (which === 'attendance') {
+    const missionDates    = new Set(MY_RPT_CACHE.missions.map(m => String(m.MissionDate).substring(0,10)));
+    const permissionDates = new Set(MY_RPT_CACHE.permissions.map(p => String(p.PermissionDate).substring(0,10)));
+    const rows = MY_RPT_CACHE.attendance.map(a => {
+      const dateKey = String(a.AttendanceDate).substring(0,10);
+      return {
+        Date: a.AttendanceDate, CheckIn: a.CheckInTime||'', CheckOut: a.CheckOutTime||'',
+        ExpectedCheckOut: a.ExpectedCheckOut||'',
+        DelayMinutes: minutesToHM(a.DelayMinutes||0), OvertimeHours: hoursToHM(a.OvertimeHours||0),
+        WorkHours: a.WorkHours ? hoursToHM(a.WorkHours) : '',
+        Mission: missionDates.has(dateKey) ? 'Yes' : 'No',
+        Permission: permissionDates.has(dateKey) ? 'Yes' : 'No',
+      };
+    });
+    exportArrayToExcel(rows, `attendance_${emp}`, {
+      Date:t('date'), CheckIn:t('checkInTime'), CheckOut:t('checkOutTime'), ExpectedCheckOut:t('expectedCheckOutTime'),
+      DelayMinutes:t('delayMins'), OvertimeHours:t('overtimeHours'), WorkHours:t('workHours'),
+      Mission:t('missions'), Permission:t('permissions'),
+    });
+  } else if (which === 'overtimeMission') {
+    const o = MY_RPT_CACHE.overtime || { totalOvertime:0, totalMissions:0, netRemaining:0 };
+    exportArrayToExcel([{
+      TotalOvertimeHours: hoursToHM(o.totalOvertime),
+      TotalMissionHours:  hoursToHM(o.totalMissions),
+      NetRemainingHours:  hoursToHM(o.netRemaining),
+    }], `overtime_balance_${emp}`, {
+      TotalOvertimeHours:t('totalOvertimeEarned'), TotalMissionHours:t('totalMissionHours'), NetRemainingHours:t('netOvertimeRemaining'),
+    });
+  } else if (which === 'leaveMissionPerm') {
+    const filterVal = document.getElementById('myRpt3TypeFilter')?.value || 'all';
+    const { leaves, permissions, missions, ltMap, mtMap } = MY_RPT_CACHE;
+    // Mirrors renderCombinedReport() exactly — same rows, same order, same value formatting.
+    let combined = [
+      ...leaves.map(l => ({ Type: t('leaves'), Date: `${l.FromDate} - ${l.ToDate}`, Detail: ltMap[l.LeaveTypeID]||l.LeaveTypeID, Value: `${l.DaysCount} ${t('days')}`, kind:'leaves', sortDate:l.FromDate })),
+      ...permissions.map(p => ({ Type: t('permissions'), Date: p.PermissionDate, Detail: `${p.FromTime} - ${p.ToTime}`, Value: hoursToHM(p.DurationHours), kind:'permissions', sortDate:p.PermissionDate })),
+      ...missions.map(m => ({ Type: t('missions'), Date: m.MissionDate, Detail: mtMap[m.MissionTypeID]||m.MissionTypeID, Value: hoursToHM(m.DurationHours), kind:'missions', sortDate:m.MissionDate })),
+    ].sort((a,b) => a.sortDate > b.sortDate ? -1 : 1);
+    if (filterVal !== 'all') combined = combined.filter(c => c.kind === filterVal);
+    const rows = combined.map(({Type,Date,Detail,Value}) => ({Type,Date,Detail,Value}));
+    exportArrayToExcel(rows, `leaves_missions_permissions_${emp}`, {
+      Type:t('reportType'), Date:t('date'), Detail:t('details'), Value:`${t('hours')}/${t('days')}`,
+    });
+  }
+}
+</script>

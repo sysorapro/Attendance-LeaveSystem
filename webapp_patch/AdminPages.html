@@ -1,0 +1,999 @@
+
+<script>
+// ============================================================
+// AdminPages.js — Admin & Manager Page Renderers
+// ============================================================
+
+// ── Employees ────────────────────────────────────────────────
+async function renderEmployees() {
+  const container = document.getElementById('pageContent');
+  const [empsRes, deptsRes, sectsRes] = await Promise.all([
+    api('getEmployees', {}),
+    api('getDepartments', {}),
+    api('getSections', {}),
+  ]);
+  const employees = empsRes.success  ? empsRes.data  : [];
+  const depts     = deptsRes.success ? deptsRes.data : [];
+  const sects     = sectsRes.success ? sectsRes.data : [];
+
+  const deptMap = {}; depts.forEach(d => { deptMap[d.DepartmentID] = APP.lang==='ar' ? d.DepartmentNameAr : d.DepartmentNameEn; });
+  const sectMap = {}; sects.forEach(s => { sectMap[s.SectionID]    = APP.lang==='ar' ? s.SectionNameAr    : s.SectionNameEn;    });
+
+  const deptOpts = depts.map(d => `<option value="${d.DepartmentID}">${APP.lang==='ar'?d.DepartmentNameAr:d.DepartmentNameEn}</option>`).join('');
+  const sectOpts = sects.map(s => `<option value="${s.SectionID}">${APP.lang==='ar'?s.SectionNameAr:s.SectionNameEn}</option>`).join('');
+
+  const rows = employees.map(e => `
+    <tr>
+      <td><span class="fw-bold">${e.EmployeeCode}</span></td>
+      <td>${e.EmployeeNameAr}</td>
+      <td>${e.EmployeeNameEn}</td>
+      <td>${deptMap[e.DepartmentID] || '—'}</td>
+      <td>${sectMap[e.SectionID] || '—'}</td>
+      <td>${e.JobGrade || '—'}</td>
+      <td><span class="badge-status ${e.WorkType==='Flexible'?'badge-info':'badge-secondary'}">${e.WorkType==='Flexible'?t('flexible'):t('normal')}</span></td>
+      <td><span class="badge-status ${String(e.ActiveFlag).toLowerCase()!=='false'?'badge-success':'badge-danger'}">${String(e.ActiveFlag).toLowerCase()!=='false'?t('active'):t('inactive')}</span></td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openEmpModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">
+          <span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteEmp('${e.EmployeeCode}')">
+          <span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('employees')}</div>
+        <div class="page-header-sub">${t('totalCount')}: ${employees.length} ${t('employees')}</div></div>
+      <button class="btn btn-primary" onclick="openEmpModal(null)">
+        <span class="material-icons-round">person_add</span>${t('add')}</button>
+    </div>
+    <div class="filter-bar row g-2 align-items-end mb-3">
+      <div class="col-md-4">
+        <div class="search-bar"><input type="text" class="form-control" id="empSearch" placeholder="${t('search')}..." oninput="filterEmpTable(this.value)">
+          <span class="material-icons-round search-icon">search</span></div></div>
+      <div class="col-md-3"><select class="form-select" id="empDeptFilter" onchange="filterEmpTable()">
+        <option value="">${t('allDepartments')}</option>${deptOpts}</select></div>
+    </div>
+    <div class="card"><div class="card-body p-0 data-table-wrapper">
+      ${employees.length ? `
+      <table class="data-table" id="empTable">
+        <thead><tr>
+          <th>${t('code')}</th><th>${t('nameAr')}</th><th>${t('nameEn')}</th>
+          <th>${t('department')}</th><th>${t('section')}</th><th>${t('jobGrade')}</th>
+          <th>${t('workType')}</th><th>${t('active')}</th><th>${t('actions')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="empty-state"><span class="material-icons-round">people</span><div>${t('noData')}</div></div>`}
+    </div></div>
+
+    <!-- Employee Modal -->
+    <div class="modal fade" id="empModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="empModalTitle">${t('addEmployee')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="empCode">
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">${t('code')} *</label>
+              <input class="form-control" id="empCodeInput" placeholder="EMP001"></div>
+            <div class="col-md-4"><label class="form-label">${t('nameAr')} *</label>
+              <input class="form-control" id="empNameAr"></div>
+            <div class="col-md-4"><label class="form-label">${t('nameEn')}</label>
+              <input class="form-control" id="empNameEn"></div>
+            <div class="col-md-4"><label class="form-label">${t('jobGrade')}</label>
+              <input class="form-control" id="empGrade"></div>
+            <div class="col-md-4"><label class="form-label">${t('department')}</label>
+              <select class="form-select" id="empDept" onchange="loadSectionsByDept(this.value,'empSect')">
+                <option value="">${t('selectOption')}</option>${deptOpts}</select></div>
+            <div class="col-md-4"><label class="form-label">${t('section')}</label>
+              <select class="form-select" id="empSect"><option value="">${t('selectOption')}</option>${sectOpts}</select></div>
+            <div class="col-md-4"><label class="form-label">${t('mobile')}</label>
+              <input class="form-control" id="empMobile" type="tel"></div>
+            <div class="col-md-4"><label class="form-label">${t('email')}</label>
+              <input class="form-control" id="empEmail" type="email"></div>
+            <div class="col-md-4"><label class="form-label">${t('workType')}</label>
+              <select class="form-select" id="empWorkType">
+                <option value="Normal">${t('normal')}</option>
+                <option value="Flexible">${t('flexible')}</option>
+              </select></div>
+            <div class="col-md-4"><label class="form-label">${t('active')}</label>
+              <select class="form-select" id="empActive">
+                <option value="true">${t('active')}</option>
+                <option value="false">${t('inactive')}</option>
+              </select></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitEmployee()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+function openEmpModal(emp) {
+  document.getElementById('empModalTitle').textContent = emp ? t('editEmployee') : t('addEmployee');
+  document.getElementById('empCode').value        = emp ? emp.EmployeeCode    : '';
+  document.getElementById('empCodeInput').value   = emp ? emp.EmployeeCode    : '';
+  document.getElementById('empCodeInput').disabled= !!emp;
+  document.getElementById('empNameAr').value      = emp ? emp.EmployeeNameAr  : '';
+  document.getElementById('empNameEn').value      = emp ? emp.EmployeeNameEn  : '';
+  document.getElementById('empGrade').value       = emp ? emp.JobGrade        : '';
+  document.getElementById('empDept').value        = emp ? emp.DepartmentID    : '';
+  document.getElementById('empSect').value        = emp ? emp.SectionID       : '';
+  document.getElementById('empMobile').value      = emp ? emp.Mobile          : '';
+  document.getElementById('empEmail').value       = emp ? emp.Email           : '';
+  document.getElementById('empWorkType').value    = emp ? emp.WorkType        : 'Normal';
+  document.getElementById('empActive').value      = emp ? emp.ActiveFlag      : 'true';
+  new bootstrap.Modal(document.getElementById('empModal')).show();
+}
+
+async function submitEmployee() {
+  const employee = {
+    EmployeeCode:   (document.getElementById('empCode').value || document.getElementById('empCodeInput').value).trim().toUpperCase(),
+    EmployeeNameAr: document.getElementById('empNameAr').value.trim(),
+    EmployeeNameEn: document.getElementById('empNameEn').value.trim(),
+    JobGrade:       document.getElementById('empGrade').value.trim(),
+    DepartmentID:   document.getElementById('empDept').value,
+    SectionID:      document.getElementById('empSect').value,
+    Mobile:         document.getElementById('empMobile').value.trim(),
+    Email:          document.getElementById('empEmail').value.trim(),
+    WorkType:       document.getElementById('empWorkType').value,
+    ActiveFlag:     document.getElementById('empActive').value,
+  };
+  if (!employee.EmployeeCode || !employee.EmployeeNameAr) {
+    showToast(t('requireEmployeeCode'), 'danger'); return;
+  }
+  const res = await api('saveEmployee', { employee });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('empModal'))?.hide();
+    renderEmployees();
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function deleteEmp(employeeCode) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteEmployee', { employeeCode });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderEmployees();
+}
+
+function filterEmpTable(searchVal) {
+  const q    = (searchVal || document.getElementById('empSearch')?.value || '').toLowerCase();
+  const dept = document.getElementById('empDeptFilter')?.value || '';
+  document.querySelectorAll('#empTable tbody tr').forEach(tr => {
+    const text    = tr.textContent.toLowerCase();
+    const deptTd  = tr.cells[3]?.textContent || '';
+    const matchQ  = !q    || text.includes(q);
+    const matchD  = !dept || deptTd.includes(dept);
+    tr.style.display = (matchQ && matchD) ? '' : 'none';
+  });
+}
+
+async function loadSectionsByDept(deptID, selectId) {
+  const res  = await api('getSections', { departmentID: deptID });
+  const sects = res.success ? res.data : [];
+  const sel  = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${t('selectOption')}</option>` +
+    sects.map(s => `<option value="${s.SectionID}">${APP.lang==='ar'?s.SectionNameAr:s.SectionNameEn}</option>`).join('');
+}
+
+// ── Users ─────────────────────────────────────────────────────
+async function renderUsers() {
+  const container = document.getElementById('pageContent');
+  const [usersRes, empsRes, empsNoAdminRes] = await Promise.all([
+    api('getUsers', {}),
+    api('getEmployees', { includeAdmin: true }),
+    api('getEmployees', {}),
+  ]);
+  const users = usersRes.success ? usersRes.data : [];
+  const emps  = empsRes.success  ? empsRes.data  : [];
+  const empsForDropdown = empsNoAdminRes.success ? empsNoAdminRes.data : [];
+  const empMap = {}; emps.forEach(e => { empMap[e.EmployeeCode] = e; });
+  const empOpts = empsForDropdown.map(e => `<option value="${e.EmployeeCode}">${e.EmployeeCode} — ${e.EmployeeNameAr}</option>`).join('');
+
+  const roleLabel = r => r==='Admin'?`<span class="badge-status badge-danger">${t('adminRole')}</span>`:r==='Manager'?`<span class="badge-status badge-warning">${t('managerRole')}</span>`:`<span class="badge-status badge-secondary">${t('employeeRole')}</span>`;
+
+  const rows = users.map(u => `
+    <tr>
+      <td>${u.EmployeeCode}</td>
+      <td>${empMap[u.EmployeeCode] ? empMap[u.EmployeeCode].EmployeeNameAr : '—'}</td>
+      <td>${u.Username}</td>
+      <td>${roleLabel(u.Role)}</td>
+      <td><span class="badge-status ${String(u.ActiveFlag).toLowerCase()==='true'?'badge-success':'badge-danger'}">${String(u.ActiveFlag).toLowerCase()==='true'?t('active'):t('inactive')}</span></td>
+      <td>${parseInt(u.FailedLoginAttempts||0) >= 5 ? `<span class="badge-status badge-danger">${t('locked')}</span>` : u.FailedLoginAttempts||0}</td>
+      <td>${u.LastLoginDate ? formatDateAr(u.LastLoginDate) : '—'}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openUserModal(${JSON.stringify(u).replace(/"/g,'&quot;')})">
+          <span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-warning" onclick="resetUserPasswordAct('${u.Username}')" title="${t('resetPassword')}">
+          <span class="material-icons-round">lock_reset</span></button>
+        ${parseInt(u.FailedLoginAttempts||0)>=5?`<button class="btn btn-sm btn-outline-success" onclick="unlockUserAct('${u.Username}')"><span class="material-icons-round">lock_open</span></button>`:''}
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteUserAct('${u.UserID}')">
+          <span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('users')}</div></div>
+      <button class="btn btn-primary" onclick="openUserModal(null)">
+        <span class="material-icons-round">person_add</span>${t('add')}</button>
+    </div>
+    <div class="card"><div class="data-table-wrapper">
+      ${users.length ? `
+      <table class="data-table">
+        <thead><tr>
+          <th>${t('code')}</th><th>${t('name')}</th><th>${t('username')}</th><th>${t('role')}</th>
+          <th>${t('active')}</th><th>${t('loginAttempts')}</th><th>${t('lastLogin')}</th><th>${t('actions')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="empty-state"><span class="material-icons-round">manage_accounts</span><div>${t('noData')}</div></div>`}
+    </div></div>
+
+    <div class="modal fade" id="userModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="userModalTitle">${t('addUser')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="uUserID">
+          <div class="mb-3"><label class="form-label">${t('employeeRequiredField')}</label>
+            <select class="form-select" id="uEmpCode"><option value="">${t('selectOption')}</option>${empOpts}</select></div>
+          <div class="mb-3"><label class="form-label">${t('role')} *</label>
+            <select class="form-select" id="uRole">
+              <option value="Employee">${t('employeeRole')}</option>
+              <option value="Manager">${t('managerRole')}</option>
+              <option value="Admin">${t('adminRole')}</option>
+            </select></div>
+          <div class="mb-3"><label class="form-label">${t('password')} <small class="text-secondary">${t('passwordLeaveBlank')}</small></label>
+            <input type="password" class="form-control" id="uPass" autocomplete="new-password" placeholder="Password@123"></div>
+          <div class="mb-3"><label class="form-label">${t('active')}</label>
+            <select class="form-select" id="uActive">
+              <option value="true">${t('active')}</option><option value="false">${t('inactive')}</option>
+            </select></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitUser()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+function openUserModal(u) {
+  document.getElementById('userModalTitle').textContent = u ? t('editUser') : t('addUser');
+  document.getElementById('uUserID').value   = u ? u.UserID       : '';
+  document.getElementById('uEmpCode').value  = u ? u.EmployeeCode : '';
+  document.getElementById('uRole').value     = u ? u.Role         : 'Employee';
+  document.getElementById('uPass').value     = '';
+  document.getElementById('uActive').value   = u ? u.ActiveFlag   : 'true';
+  new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+async function submitUser() {
+  const user = {
+    UserID:       document.getElementById('uUserID').value,
+    EmployeeCode: document.getElementById('uEmpCode').value,
+    Role:         document.getElementById('uRole').value,
+    Password:     document.getElementById('uPass').value || '***',
+    ActiveFlag:   document.getElementById('uActive').value,
+  };
+  if (!user.EmployeeCode) { showToast(t('chooseEmployeeRequired'), 'danger'); return; }
+  const res = await api('saveUser', { user });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('userModal'))?.hide();
+    renderUsers();
+  } else { showToast(res.message, 'danger'); }
+}
+
+async function deleteUserAct(userID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteUser', { userID });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderUsers();
+}
+
+async function unlockUserAct(username) {
+  const res = await api('unlockUser', { username });
+  showToast(res.message, res.success ? 'success' : 'danger');
+  if (res.success) renderUsers();
+}
+
+async function resetUserPasswordAct(username) {
+  if (!(await confirmDialog(t('resetPasswordConfirm')))) return;
+  const res = await api('resetPassword', { username });
+  if (res.success) {
+    // Shown as a persistent alert rather than a toast — the admin needs to
+    // read the temporary password and pass it on to the employee.
+    alert(res.message);
+    renderUsers();
+  } else {
+    showToast(res.message, 'danger');
+  }
+}
+
+// ── Departments & Sections ────────────────────────────────────
+async function renderDepartments() {
+  const container = document.getElementById('pageContent');
+  const [deptsRes, sectsRes, empsRes] = await Promise.all([
+    api('getDepartments', {}),
+    api('getSections', {}),
+    api('getEmployees', {}),
+  ]);
+  const depts = deptsRes.success ? deptsRes.data : [];
+  const sects = sectsRes.success ? sectsRes.data : [];
+  const emps  = empsRes.success  ? empsRes.data  : [];
+  const empMap  = {}; emps.forEach(e => { empMap[e.EmployeeCode] = e.EmployeeNameAr; });
+  const deptMap = {}; depts.forEach(d => { deptMap[d.DepartmentID] = APP.lang==='ar'?d.DepartmentNameAr:d.DepartmentNameEn; });
+  const deptOpts= depts.map(d => `<option value="${d.DepartmentID}">${APP.lang==='ar'?d.DepartmentNameAr:d.DepartmentNameEn}</option>`).join('');
+  const empOpts = emps.map(e => `<option value="${e.EmployeeCode}">${e.EmployeeCode} — ${e.EmployeeNameAr}</option>`).join('');
+
+  const deptRows = depts.map(d => `
+    <tr>
+      <td>${d.DepartmentID}</td><td>${d.DepartmentNameAr}</td><td>${d.DepartmentNameEn}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openDeptModal(${JSON.stringify(d).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteDept('${d.DepartmentID}')"><span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  const sectRows = sects.map(s => `
+    <tr>
+      <td>${s.SectionID}</td><td>${deptMap[s.DepartmentID]||'—'}</td>
+      <td>${s.SectionNameAr}</td><td>${s.SectionNameEn}</td>
+      <td>${empMap[s.ManagerEmployeeID]||'—'}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openSectModal(${JSON.stringify(s).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteSect('${s.SectionID}')"><span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('departments')}</div></div></div>
+    <div class="row g-3">
+      <!-- Departments -->
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center px-3 py-2">
+            <span class="fw-bold">${t('departmentsTitle')}</span>
+            <button class="btn btn-sm btn-primary" onclick="openDeptModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+          </div>
+          <div class="data-table-wrapper">
+            ${depts.length ? `
+            <table class="data-table">
+              <thead><tr><th>${t('codeLabel')}</th><th>${t('nameArabic')}</th><th>${t('nameEnglish')}</th><th>${t('actions')}</th></tr></thead>
+              <tbody>${deptRows}</tbody>
+            </table>` : `<div class="empty-state py-4"><span class="material-icons-round">corporate_fare</span><div>${t('noData')}</div></div>`}
+          </div>
+        </div>
+      </div>
+      <!-- Sections -->
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center px-3 py-2">
+            <span class="fw-bold">${t('sectionsTitle')}</span>
+            <button class="btn btn-sm btn-primary" onclick="openSectModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+          </div>
+          <div class="data-table-wrapper">
+            ${sects.length ? `
+            <table class="data-table">
+              <thead><tr><th>${t('codeLabel')}</th><th>${t('department')}</th><th>${t('nameArabic')}</th><th>${t('nameEnglish')}</th><th>${t('sectionManager')}</th><th>${t('actions')}</th></tr></thead>
+              <tbody>${sectRows}</tbody>
+            </table>` : `<div class="empty-state py-4"><span class="material-icons-round">group_work</span><div>${t('noData')}</div></div>`}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dept Modal -->
+    <div class="modal fade" id="deptModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="deptModalTitle">${t('addDepartment')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="deptID">
+          <div class="mb-3"><label class="form-label">${t('nameArabic')} *</label><input class="form-control" id="deptNameAr"></div>
+          <div class="mb-3"><label class="form-label">${t('nameEnglish')}</label><input class="form-control" id="deptNameEn"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitDept()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Section Modal -->
+    <div class="modal fade" id="sectModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="sectModalTitle">${t('addSection')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="sectID">
+          <div class="mb-3"><label class="form-label">${t('department')} *</label>
+            <select class="form-select" id="sectDept"><option value="">${t('selectOption')}</option>${deptOpts}</select></div>
+          <div class="mb-3"><label class="form-label">${t('nameArabic')} *</label><input class="form-control" id="sectNameAr"></div>
+          <div class="mb-3"><label class="form-label">${t('nameEnglish')}</label><input class="form-control" id="sectNameEn"></div>
+          <div class="mb-3"><label class="form-label">${t('sectionManager')}</label>
+            <select class="form-select" id="sectMgr"><option value="">${t('selectOption')}</option>${empOpts}</select></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitSect()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+function openDeptModal(d) {
+  document.getElementById('deptModalTitle').textContent = d ? t('editDepartment') : t('addDepartment');
+  document.getElementById('deptID').value     = d ? d.DepartmentID      : '';
+  document.getElementById('deptNameAr').value = d ? d.DepartmentNameAr  : '';
+  document.getElementById('deptNameEn').value = d ? d.DepartmentNameEn  : '';
+  new bootstrap.Modal(document.getElementById('deptModal')).show();
+}
+async function submitDept() {
+  const department = {
+    DepartmentID:   document.getElementById('deptID').value || undefined,
+    DepartmentNameAr: document.getElementById('deptNameAr').value.trim(),
+    DepartmentNameEn: document.getElementById('deptNameEn').value.trim(),
+  };
+  if (!department.DepartmentNameAr) { showToast(t('requireNameAr'),'danger'); return; }
+  const res = await api('saveDepartment', { department });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('deptModal'))?.hide(); renderDepartments(); }
+  else showToast(res.message,'danger');
+}
+async function deleteDept(departmentID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteDepartment', { departmentID });
+  showToast(res.message, res.success?'success':'danger');
+  if (res.success) renderDepartments();
+}
+
+function openSectModal(s) {
+  document.getElementById('sectModalTitle').textContent = s ? t('editSection') : t('addSection');
+  document.getElementById('sectID').value      = s ? s.SectionID      : '';
+  document.getElementById('sectDept').value    = s ? s.DepartmentID   : '';
+  document.getElementById('sectNameAr').value  = s ? s.SectionNameAr  : '';
+  document.getElementById('sectNameEn').value  = s ? s.SectionNameEn  : '';
+  document.getElementById('sectMgr').value     = s ? s.ManagerEmployeeID : '';
+  new bootstrap.Modal(document.getElementById('sectModal')).show();
+}
+async function submitSect() {
+  const section = {
+    SectionID:         document.getElementById('sectID').value || undefined,
+    DepartmentID:      document.getElementById('sectDept').value,
+    SectionNameAr:     document.getElementById('sectNameAr').value.trim(),
+    SectionNameEn:     document.getElementById('sectNameEn').value.trim(),
+    ManagerEmployeeID: document.getElementById('sectMgr').value,
+  };
+  if (!section.DepartmentID || !section.SectionNameAr) { showToast(t('requireDeptNameAr'),'danger'); return; }
+  const res = await api('saveSection', { section });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('sectModal'))?.hide(); renderDepartments(); }
+  else showToast(res.message,'danger');
+}
+async function deleteSect(sectionID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteSection', { sectionID });
+  showToast(res.message, res.success?'success':'danger');
+  if (res.success) renderDepartments();
+}
+
+// ── Leave Types ───────────────────────────────────────────────
+async function renderLeaveTypes() {
+  const container = document.getElementById('pageContent');
+  const [ltRes, mtRes] = await Promise.all([api('getLeaveTypes',{}), api('getMissionTypes',{})]);
+  const lts = ltRes.success ? ltRes.data : [];
+  const mts = mtRes.success ? mtRes.data : [];
+
+  const ltRows = lts.map(l => `
+    <tr>
+      <td>${l.LeaveTypeID}</td><td>${l.LeaveNameAr}</td><td>${l.LeaveNameEn}</td>
+      <td><span class="badge-status ${String(l.ActiveFlag).toLowerCase()==='true'?'badge-success':'badge-danger'}">${String(l.ActiveFlag).toLowerCase()==='true'?t('active'):t('inactive')}</span></td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openLTModal(${JSON.stringify(l).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteLT('${l.LeaveTypeID}')"><span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  const mtRows = mts.map(m => `
+    <tr>
+      <td>${m.MissionTypeID}</td><td>${m.MissionNameAr}</td><td>${m.MissionNameEn}</td>
+      <td><span class="badge-status ${String(m.ActiveFlag).toLowerCase()==='true'?'badge-success':'badge-danger'}">${String(m.ActiveFlag).toLowerCase()==='true'?t('active'):t('inactive')}</span></td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openMTModal(${JSON.stringify(m).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteMT('${m.MissionTypeID}')"><span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('leaveTypes')}</div></div></div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center px-3 py-2">
+            <span class="fw-bold">${t('leaveTypesTitle')}</span>
+            <button class="btn btn-sm btn-primary" onclick="openLTModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table"><thead><tr><th>${t('codeLabel')}</th><th>${t('nameArabic')}</th><th>${t('nameEnglish')}</th><th>${t('status')}</th><th>${t('actions')}</th></tr></thead>
+            <tbody>${ltRows}</tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center px-3 py-2">
+            <span class="fw-bold">${t('missionTypesTitle')}</span>
+            <button class="btn btn-sm btn-primary" onclick="openMTModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table"><thead><tr><th>${t('codeLabel')}</th><th>${t('nameArabic')}</th><th>${t('nameEnglish')}</th><th>${t('status')}</th><th>${t('actions')}</th></tr></thead>
+            <tbody>${mtRows}</tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leave Type Modal -->
+    <div class="modal fade" id="ltModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="ltTitle">${t('addLeaveType')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="ltID">
+          <div class="mb-3"><label class="form-label">${t('nameArabic')} *</label><input class="form-control" id="ltNameAr"></div>
+          <div class="mb-3"><label class="form-label">${t('nameEnglish')}</label><input class="form-control" id="ltNameEn"></div>
+          <div class="mb-3"><label class="form-label">${t('status')}</label>
+            <select class="form-select" id="ltActive"><option value="true">${t('active')}</option><option value="false">${t('inactive')}</option></select></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitLT()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Mission Type Modal -->
+    <div class="modal fade" id="mtModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="mtTitle">${t('addMissionType')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="mtID">
+          <div class="mb-3"><label class="form-label">${t('nameArabic')} *</label><input class="form-control" id="mtNameAr"></div>
+          <div class="mb-3"><label class="form-label">${t('nameEnglish')}</label><input class="form-control" id="mtNameEn"></div>
+          <div class="mb-3"><label class="form-label">${t('status')}</label>
+            <select class="form-select" id="mtActive"><option value="true">${t('active')}</option><option value="false">${t('inactive')}</option></select></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitMT()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+
+function openLTModal(l) {
+  document.getElementById('ltTitle').textContent = l ? t('editLeaveType') : t('addLeaveType');
+  document.getElementById('ltID').value     = l ? l.LeaveTypeID : '';
+  document.getElementById('ltNameAr').value = l ? l.LeaveNameAr : '';
+  document.getElementById('ltNameEn').value = l ? l.LeaveNameEn : '';
+  document.getElementById('ltActive').value = l ? l.ActiveFlag  : 'true';
+  new bootstrap.Modal(document.getElementById('ltModal')).show();
+}
+async function submitLT() {
+  const leaveType = { LeaveTypeID: document.getElementById('ltID').value||undefined, LeaveNameAr: document.getElementById('ltNameAr').value.trim(), LeaveNameEn: document.getElementById('ltNameEn').value.trim(), ActiveFlag: document.getElementById('ltActive').value };
+  if (!leaveType.LeaveNameAr) { showToast(t('requireNameAr'),'danger'); return; }
+  const res = await api('saveLeaveType', { leaveType });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('ltModal'))?.hide(); renderLeaveTypes(); }
+  else showToast(res.message,'danger');
+}
+async function deleteLT(leaveTypeID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteLeaveType', { leaveTypeID });
+  showToast(res.message, res.success?'success':'danger');
+  if (res.success) renderLeaveTypes();
+}
+
+function openMTModal(m) {
+  document.getElementById('mtTitle').textContent = m ? t('editMissionType') : t('addMissionType');
+  document.getElementById('mtID').value     = m ? m.MissionTypeID : '';
+  document.getElementById('mtNameAr').value = m ? m.MissionNameAr : '';
+  document.getElementById('mtNameEn').value = m ? m.MissionNameEn : '';
+  document.getElementById('mtActive').value = m ? m.ActiveFlag    : 'true';
+  new bootstrap.Modal(document.getElementById('mtModal')).show();
+}
+async function submitMT() {
+  const missionType = { MissionTypeID: document.getElementById('mtID').value||undefined, MissionNameAr: document.getElementById('mtNameAr').value.trim(), MissionNameEn: document.getElementById('mtNameEn').value.trim(), ActiveFlag: document.getElementById('mtActive').value };
+  if (!missionType.MissionNameAr) { showToast(t('requireNameAr'),'danger'); return; }
+  const res = await api('saveMissionType', { missionType });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('mtModal'))?.hide(); renderLeaveTypes(); }
+  else showToast(res.message,'danger');
+}
+async function deleteMT(missionTypeID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteMissionType', { missionTypeID });
+  showToast(res.message, res.success?'success':'danger');
+  if (res.success) renderLeaveTypes();
+}
+
+// ── Holidays ──────────────────────────────────────────────────
+async function renderHolidays() {
+  const container = document.getElementById('pageContent');
+  const year = new Date().getFullYear().toString();
+  const res  = await api('getHolidays', { year });
+  const holidays = res.success ? res.data : [];
+
+  const rows = holidays.map(h => `
+    <tr>
+      <td>${formatDateAr(h.HolidayDate)}</td>
+      <td>${h.HolidayNameAr}</td><td>${h.HolidayNameEn}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openHolModal(${JSON.stringify(h).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteHol('${h.HolidayID}')"><span class="material-icons-round">delete</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('holidays')} — ${year}</div></div>
+      <button class="btn btn-primary" onclick="openHolModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+    </div>
+    <div class="card"><div class="data-table-wrapper">
+      ${holidays.length ? `
+      <table class="data-table">
+        <thead><tr><th>${t('date')}</th><th>${t('nameArabic')}</th><th>${t('nameEnglish')}</th><th>${t('actions')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="empty-state"><span class="material-icons-round">celebration</span><div>${t('noData')}</div></div>`}
+    </div></div>
+
+    <div class="modal fade" id="holModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="holTitle">${t('addHoliday')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="holID">
+          <div class="mb-3"><label class="form-label">${t('date')} *</label><input type="date" class="form-control" id="holDate"></div>
+          <div class="mb-3"><label class="form-label">${t('nameArabic')} *</label><input class="form-control" id="holNameAr"></div>
+          <div class="mb-3"><label class="form-label">${t('nameEnglish')}</label><input class="form-control" id="holNameEn"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitHol()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+function openHolModal(h) {
+  document.getElementById('holTitle').textContent = h ? t('editHoliday') : t('addHoliday');
+  document.getElementById('holID').value     = h ? h.HolidayID    : '';
+  document.getElementById('holDate').value   = h ? h.HolidayDate  : '';
+  document.getElementById('holNameAr').value = h ? h.HolidayNameAr: '';
+  document.getElementById('holNameEn').value = h ? h.HolidayNameEn: '';
+  new bootstrap.Modal(document.getElementById('holModal')).show();
+}
+async function submitHol() {
+  const holiday = { HolidayID: document.getElementById('holID').value||undefined, HolidayDate: document.getElementById('holDate').value, HolidayNameAr: document.getElementById('holNameAr').value.trim(), HolidayNameEn: document.getElementById('holNameEn').value.trim() };
+  if (!holiday.HolidayDate || !holiday.HolidayNameAr) { showToast(t('requireDateName'),'danger'); return; }
+  const res = await api('saveHoliday', { holiday });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('holModal'))?.hide(); renderHolidays(); }
+  else showToast(res.message,'danger');
+}
+async function deleteHol(holidayID) {
+  if (!(await confirmDialog())) return;
+  const res = await api('deleteHoliday', { holidayID });
+  showToast(res.message, res.success?'success':'danger');
+  if (res.success) renderHolidays();
+}
+
+// ── Leave Balance ─────────────────────────────────────────────
+async function renderLeaveBalance() {
+  const container = document.getElementById('pageContent');
+  const year = new Date().getFullYear().toString();
+  const [balRes, empsRes, ltRes] = await Promise.all([
+    api('getLeaveBalance', { year }),
+    api('getEmployees', {}),
+    api('getLeaveTypes', { activeOnly: true }),
+  ]);
+  const balances = balRes.success ? balRes.data : [];
+  const emps     = empsRes.success ? empsRes.data : [];
+  const lts      = ltRes.success   ? ltRes.data   : [];
+  const empMap   = {}; emps.forEach(e => { empMap[e.EmployeeCode] = e.EmployeeNameAr; });
+  const ltMap    = {}; lts.forEach(l => { ltMap[l.LeaveTypeID] = APP.lang==='ar' ? l.LeaveNameAr : l.LeaveNameEn; });
+  const empOpts  = emps.map(e => `<option value="${e.EmployeeCode}">${e.EmployeeCode} — ${e.EmployeeNameAr}</option>`).join('');
+  const ltOpts   = lts.map(l => `<option value="${l.LeaveTypeID}">${APP.lang==='ar'?l.LeaveNameAr:l.LeaveNameEn}</option>`).join('');
+
+  const rows = balances.map(b => `
+    <tr>
+      <td>${b.EmployeeCode}</td>
+      <td>${empMap[b.EmployeeCode]||'—'}</td>
+      <td>${ltMap[b.LeaveTypeID]||b.LeaveTypeID}</td>
+      <td class="text-center fw-bold">${b.BalanceDays}</td>
+      <td class="text-center text-danger">${b.ConsumedDays}</td>
+      <td class="text-center fw-bold" style="color:var(--success)">${b.RemainingDays}</td>
+      <td class="action-btns">
+        <button class="btn btn-sm btn-outline-primary" onclick="openBalModal(${JSON.stringify(b).replace(/"/g,'&quot;')})"><span class="material-icons-round">edit</span></button>
+      </td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div><div class="page-header-title">${t('leaveBalance')} — ${year}</div></div>
+      <button class="btn btn-primary" onclick="openBalModal(null)"><span class="material-icons-round">add</span>${t('add')}</button>
+    </div>
+    <div class="card"><div class="data-table-wrapper">
+      ${balances.length ? `
+      <table class="data-table">
+        <thead><tr><th>${t('code')}</th><th>${t('employee')}</th><th>${t('leaveType')}</th>
+          <th class="text-center">${t('balance')}</th><th class="text-center">${t('consumed')}</th>
+          <th class="text-center">${t('remaining')}</th><th>${t('actions')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="empty-state"><span class="material-icons-round">balance</span><div>${t('noData')}</div></div>`}
+    </div></div>
+
+    <div class="modal fade" id="balModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="balTitle">${t('addBalance')}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label">${t('employeeRequiredField')}</label>
+            <select class="form-select" id="balEmp"><option value="">${t('selectOption')}</option>${empOpts}</select></div>
+          <div class="mb-3"><label class="form-label">${t('leaveType')} *</label>
+            <select class="form-select" id="balLT"><option value="">${t('selectOption')}</option>${ltOpts}</select></div>
+          <div class="row g-3">
+            <div class="col-6"><label class="form-label">${t('year')}</label>
+              <input type="number" class="form-control" id="balYear" value="${year}" min="2020" max="2099"></div>
+            <div class="col-6"><label class="form-label">${t('balance')} (${t('days')})</label>
+              <input type="number" class="form-control" id="balDays" min="0" step="0.5"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">${t('cancel')}</button>
+          <button class="btn btn-primary" onclick="submitBal()">${t('save')}</button>
+        </div>
+      </div></div>
+    </div>`;
+}
+function openBalModal(b) {
+  document.getElementById('balTitle').textContent = b ? t('editBalance') : t('addBalance');
+  document.getElementById('balEmp').value  = b ? b.EmployeeCode : '';
+  document.getElementById('balLT').value   = b ? b.LeaveTypeID  : '';
+  document.getElementById('balYear').value = b ? b.Year         : new Date().getFullYear().toString();
+  document.getElementById('balDays').value = b ? b.BalanceDays  : '';
+  new bootstrap.Modal(document.getElementById('balModal')).show();
+}
+async function submitBal() {
+  const balance = { EmployeeCode: document.getElementById('balEmp').value, LeaveTypeID: document.getElementById('balLT').value, Year: document.getElementById('balYear').value, BalanceDays: document.getElementById('balDays').value };
+  if (!balance.EmployeeCode || !balance.LeaveTypeID || !balance.BalanceDays) { showToast(t('requiredFields'),'danger'); return; }
+  const res = await api('saveLeaveBalance', { balance });
+  if (res.success) { showToast(res.message,'success'); bootstrap.Modal.getInstance(document.getElementById('balModal'))?.hide(); renderLeaveBalance(); }
+  else showToast(res.message,'danger');
+}
+
+// ── Settings ──────────────────────────────────────────────────
+async function renderSettings() {
+  const container = document.getElementById('pageContent');
+  const res = await api('getSettings', {});
+  const s   = res.success ? res.data : {};
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('settings')}</div></div>
+      <button class="btn btn-primary" onclick="submitSettings()"><span class="material-icons-round">save</span>${t('save')}</button>
+    </div>
+    <div class="row g-3">
+      <!-- Work Hours -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title"><span class="material-icons-round">schedule</span>${t('workSettings')}</div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">${t('startTime')}</label><input type="time" class="form-control" id="s_NormalStartTime" value="${s.NormalStartTime||'08:00'}"></div>
+            <div class="col-12"><label class="form-label">${t('latestArrival')}</label><input type="time" class="form-control" id="s_NormalFlexibleLatestArrival" value="${s.NormalFlexibleLatestArrival||'09:00'}"></div>
+            <div class="col-12"><label class="form-label">${t('requiredHours')}</label><input type="number" class="form-control" id="s_NormalRequiredHours" value="${s.NormalRequiredHours||'8'}" min="1" max="12" step="0.5"></div>
+            <div class="col-12"><label class="form-label">${t('gracePeriod')}</label><input type="number" class="form-control" id="s_GracePeriodMinutes" value="${s.GracePeriodMinutes||'10'}" min="0" max="60"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Ramadan -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title"><span class="material-icons-round">nights_stay</span>${t('ramadanSettings')}</div>
+          <div class="row g-3">
+            <div class="col-12"><small class="text-secondary">${t('ramadanRangeHint')}</small></div>
+            <div class="col-12"><label class="form-label">${t('ramadanFromDate')}</label><input type="date" class="form-control" id="s_RamadanFromDate" value="${s.RamadanFromDate||''}"></div>
+            <div class="col-12"><label class="form-label">${t('ramadanToDate')}</label><input type="date" class="form-control" id="s_RamadanToDate" value="${s.RamadanToDate||''}"></div>
+            <div class="col-12"><label class="form-label">${t('startTime')}</label><input type="time" class="form-control" id="s_RamadanStartTime" value="${s.RamadanStartTime||'09:00'}"></div>
+            <div class="col-12"><label class="form-label">${t('latestArrival')}</label><input type="time" class="form-control" id="s_RamadanFlexibleLatestArrival" value="${s.RamadanFlexibleLatestArrival||'10:00'}"></div>
+            <div class="col-12"><label class="form-label">${t('requiredHours')}</label><input type="number" class="form-control" id="s_RamadanRequiredHours" value="${s.RamadanRequiredHours||'6'}" min="1" max="10" step="0.5"></div>
+            <div class="col-12"><label class="form-label">${t('gracePeriod')}</label><input type="number" class="form-control" id="s_RamadanGracePeriodMinutes" value="${s.RamadanGracePeriodMinutes||'10'}" min="0" max="60"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Overtime & Permissions -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title"><span class="material-icons-round">more_time</span>${t('overtimeSettings')}</div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">${t('monthlyPermHours')}</label><input type="number" class="form-control" id="s_MonthlyPermissionHours" value="${s.MonthlyPermissionHours||'2'}" min="1" max="8"></div>
+            <div class="col-12">
+              <label class="form-label">${t('monthlyWorkHoursMissionCount')}</label>
+              <input type="number" class="form-control" id="s_MonthlyWorkHoursMissionCount" value="${s.MonthlyWorkHoursMissionCount||'3'}" min="1">
+              <small class="text-secondary">${t('monthlyWorkHoursMissionCountHint')}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Payroll & Session -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title"><span class="material-icons-round">calendar_month</span>${t('payrollSettings')}</div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">${t('payrollStartDay')}</label><input type="number" class="form-control" id="s_PayrollMonthStartDay" value="${s.PayrollMonthStartDay||'1'}" min="1" max="31" onchange="updatePayrollEndDayPreview()"></div>
+            <div class="col-12"><label class="form-label">${t('payrollEndDay')}</label><input type="text" class="form-control" id="s_PayrollMonthEndDayDisplay" value="" readonly></div>
+            <div class="col-12"><small class="text-secondary">${t('payrollCycleHint')}</small></div>
+            <div class="col-12"><label class="form-label">${t('sessionTimeout')}</label><input type="number" class="form-control" id="s_SessionTimeoutMinutes" value="${s.SessionTimeoutMinutes||'60'}" min="5" max="480"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Weekly Off Days -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title"><span class="material-icons-round">weekend</span>${t('weeklyOffDays')}</div>
+          <div class="row g-2">
+            ${[0,1,2,3,4,5,6].map(d => {
+              const selected = String(s.WeeklyOffDays||'5,6').split(',').map(x=>x.trim()).includes(String(d));
+              return `<div class="col-12">
+                <div class="form-check">
+                  <input class="form-check-input weekly-off-day-cb" type="checkbox" value="${d}" id="s_offday_${d}" ${selected?'checked':''}>
+                  <label class="form-check-label" for="s_offday_${d}">${t('weekday_'+d)}</label>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  updatePayrollEndDayPreview();
+}
+
+// Shows the computed payroll-cycle end day (StartDay - 1, in the following month)
+// as a read-only preview next to the editable start day — this field is derived,
+// not stored, since the actual period end is always calculated from the start day.
+function updatePayrollEndDayPreview() {
+  const startEl = document.getElementById('s_PayrollMonthStartDay');
+  const dispEl  = document.getElementById('s_PayrollMonthEndDayDisplay');
+  if (!startEl || !dispEl) return;
+  const startDay = parseInt(startEl.value) || 1;
+  if (startDay === 1) {
+    dispEl.value = (APP.lang === 'ar') ? 'آخر يوم في نفس الشهر' : 'Last day of the same month';
+  } else {
+    dispEl.value = String(startDay - 1) + ' ' + t('payrollEndDaySuffix');
+  }
+}
+
+async function submitSettings() {
+  const fields = ['NormalStartTime','NormalFlexibleLatestArrival','NormalRequiredHours','GracePeriodMinutes',
+    'RamadanStartTime','RamadanFlexibleLatestArrival','RamadanRequiredHours','RamadanGracePeriodMinutes',
+    'RamadanFromDate','RamadanToDate',
+    'MonthlyPermissionHours','MonthlyWorkHoursMissionCount',
+    'PayrollMonthStartDay','SessionTimeoutMinutes'];
+  const settings = {};
+  fields.forEach(f => {
+    const el = document.getElementById('s_' + f);
+    if (el) settings[f] = el.value;
+  });
+
+  // Validate Ramadan date range, if both are provided
+  if (settings.RamadanFromDate && settings.RamadanToDate && settings.RamadanFromDate > settings.RamadanToDate) {
+    showToast(t('ramadanDateRangeError'), 'danger');
+    return;
+  }
+
+  // Weekly off days — collect checked weekday checkboxes (0=Sunday..6=Saturday)
+  const offDays = Array.from(document.querySelectorAll('.weekly-off-day-cb'))
+    .filter(cb => cb.checked).map(cb => cb.value);
+  settings.WeeklyOffDays = offDays.join(',');
+
+  const res = await api('saveSettings', { settings });
+  showToast(res.message, res.success ? 'success' : 'danger');
+}
+
+// ── Audit Log ─────────────────────────────────────────────────
+async function renderAudit() {
+  const container = document.getElementById('pageContent');
+  const res  = await api('getAuditLog', {});
+  const logs = res.success ? res.data : [];
+
+  const actionBadge = a => {
+    const map = { LOGIN:'badge-success', LOGOUT:'badge-secondary', ADD:'badge-info',
+      EDIT:'badge-warning', DELETE:'badge-danger', CHECK_IN:'badge-success',
+      CHECK_OUT:'badge-info', CHANGE_PASSWORD:'badge-warning', UNLOCK:'badge-success' };
+    return `<span class="badge-status ${map[a]||'badge-secondary'}">${a}</span>`;
+  };
+
+  const rows = logs.map(l => `
+    <tr>
+      <td>${l.UserCode}</td>
+      <td>${actionBadge(l.Action)}</td>
+      <td>${l.TableName}</td>
+      <td><small>${l.RecordID}</small></td>
+      <td><small>${l.Timestamp}</small></td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('auditLog')}</div>
+      <div class="page-header-sub">${t('last500')}</div></div>
+      <button class="btn btn-outline-primary" onclick="renderAudit()"><span class="material-icons-round">refresh</span>${t('refresh')}</button>
+    </div>
+    <div class="card"><div class="data-table-wrapper" style="max-height:65vh;overflow-y:auto">
+      ${logs.length ? `
+      <table class="data-table">
+        <thead><tr><th>${t('user')}</th><th>${t('actions')}</th><th>${t('table')}</th><th>${t('record')}</th><th>${t('timestamp')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="empty-state"><span class="material-icons-round">history</span><div>${t('noData')}</div></div>`}
+    </div></div>`;
+}
+
+// ── My Profile ────────────────────────────────────────────────
+async function renderMyProfile() {
+  const container = document.getElementById('pageContent');
+  const res = await api('getEmployee', { employeeCode: APP.session.employeeCode });
+  const emp = res.success ? res.data : {};
+  const [deptsRes, sectsRes] = await Promise.all([api('getDepartments',{}), api('getSections',{})]);
+  const depts = deptsRes.success ? deptsRes.data : [];
+  const sects = sectsRes.success ? sectsRes.data : [];
+  const deptMap = {}; depts.forEach(d => { deptMap[d.DepartmentID] = d.DepartmentNameAr; });
+  const sectMap = {}; sects.forEach(s => { sectMap[s.SectionID]    = s.SectionNameAr;    });
+
+  container.innerHTML = `
+    <div class="page-header"><div><div class="page-header-title">${t('myProfile')}</div></div></div>
+    ${bioPunchCardHtml()}
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="card p-4 text-center">
+          <div class="user-avatar mx-auto mb-3" style="width:80px;height:80px;font-size:32px;border-radius:20px">
+            ${([emp.EmployeeNameEn||'', emp.EmployeeCode||'U'].join(' ').match(/[A-Za-z\d]/)||['U'])[0].toUpperCase()}
+          </div>
+          <div class="fw-bold fs-5">${emp.EmployeeNameAr||'—'}</div>
+          <div class="text-secondary">${emp.EmployeeNameEn||''}</div>
+          <div class="badge-status badge-info mt-2 d-inline-block">${emp.JobGrade||'—'}</div>
+          <hr>
+          <div class="text-start">
+            <div class="mb-2"><small class="text-secondary">${t('code')}:</small> <strong>${emp.EmployeeCode||'—'}</strong></div>
+            <div class="mb-2"><small class="text-secondary">${t('department')}:</small> ${deptMap[emp.DepartmentID]||'—'}</div>
+            <div class="mb-2"><small class="text-secondary">${t('section')}:</small> ${sectMap[emp.SectionID]||'—'}</div>
+            <div class="mb-2"><small class="text-secondary">${t('workType')}:</small> ${emp.WorkType==='Flexible'?t('flexible'):t('normal')}</div>
+            <div class="mb-2"><small class="text-secondary">${t('mobile')}:</small> ${emp.Mobile||'—'}</div>
+            <div class="mb-2"><small class="text-secondary">${t('email')}:</small> ${emp.Email||'—'}</div>
+          </div>
+          <button class="btn btn-outline-primary mt-3 w-100" onclick="openChangePassword()">
+            <span class="material-icons-round">lock_reset</span>${t('changePassword')}
+          </button>
+          <button class="btn btn-outline-warning mt-2 w-100" onclick="resetMyPasswordAct()">
+            <span class="material-icons-round">restart_alt</span>${t('resetPassword')}
+          </button>
+        </div>
+      </div>
+      <div class="col-md-8">
+        ${buildManualAttendanceForm('mpf')}
+      </div>
+    </div>`;
+  wireManualAttendanceForm('mpf');
+}
+
+// Resets the signed-in user's OWN password back to the system default — for
+// when they've forgotten it and so can't use "Change Password" (which needs
+// the current one). Requires an active session, so only someone already
+// signed in as this user can do it.
+async function resetMyPasswordAct() {
+  if (!(await confirmDialog(t('resetPasswordConfirm')))) return;
+  const res = await api('resetPassword', { username: APP.session.username || APP.session.employeeCode });
+  if (res.success) {
+    alert(res.message);
+  } else {
+    showToast(res.message, 'danger');
+  }
+}
+</script>

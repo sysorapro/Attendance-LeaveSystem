@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SYSORA Attendance</string>
+    <string name="web_app_url" translatable="false">https://script.google.com/macros/s/AKfycbyPZ8RZJCCKVFgBgiEmFOhLtSJtIAZD5S8CfTm0xQvLB5JlbqYOB1T-EKZdAnMkumN5/exec</string>
+</resources>

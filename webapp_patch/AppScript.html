@@ -1,0 +1,1356 @@
+
+<script>
+'use strict';
+// ============================================================
+// AppScript.js — Client-Side SPA Engine
+// ============================================================
+
+// ── State ────────────────────────────────────────────────────
+const APP = {
+  session:      null,
+  lang:         localStorage.getItem('lang')  || 'ar',
+  theme:        localStorage.getItem('theme') || 'light',
+  currentPage:  'dashboard',
+  sessionTimer: null,
+  clockTimer:   null,
+  charts:       {},
+  lastActivityTime: Date.now(),
+};
+
+// ── i18n Dictionary ──────────────────────────────────────────
+const I18N = {
+  ar: {
+    systemName:'نظام الحضور والإجازات', systemSub:'~ SYSORA ~',
+    loginSubtitle:'سجّل دخولك للمتابعة', login:'تسجيل الدخول', bioLoginBtn:'الدخول بالبصمة', credsRequired:'اسم المستخدم وكلمة المرور مطلوبان', loginFooter:'الإصدار 3.0 © 2026 — نظام الحضور والإجازات', devBy:'تطوير ~ SYSORA ~',
+    username:'اسم المستخدم', password:'كلمة المرور',
+    logout:'تسجيل الخروج', dashboard:'لوحة التحكم',
+    main:'رئيسي', myData:'بياناتي', management:'الإدارة', administration:'التهيئة',
+    myAttendance:'حضوري وانصرافي', myLeaves:'إجازاتي', myBalance:'رصيدي',
+    myMissions:'مأمورياتي', myPermissions:'أذوناتي',
+    attendance:'الحضور والانصراف', leaves:'الإجازات', missions:'المأموريات',
+    permissions:'الأذونات', reports:'التقارير', employees:'الموظفون',
+    users:'المستخدمون', departments:'الإدارات والأقسام', leaveTypes:'أنواع الإجازات',
+    holidays:'العطلات الرسمية', leaveBalance:'أرصدة الإجازات',
+    auditLog:'سجل العمليات', settings:'الإعدادات',
+    myProfile:'ملفي الشخصي', changePassword:'تغيير كلمة المرور',
+    resetPassword:'إعادة تعيين كلمة المرور',
+    resetPasswordConfirm:'سيتم إرجاع كلمة المرور إلى الكلمة الافتراضية، وسيُطلب تغييرها عند تسجيل الدخول القادم. هل تريد المتابعة؟',
+    save:'حفظ', cancel:'إلغاء', edit:'تعديل', delete:'حذف', add:'إضافة',
+    confirm:'تأكيد', search:'بحث', filter:'تصفية', export:'تصدير',
+    refresh:'تحديث', print:'طباعة',
+    totalEmployees:'إجمالي الموظفين', presentToday:'حاضر اليوم',
+    absentToday:'غائب اليوم', lateToday:'متأخر اليوم',
+    onLeaveToday:'في إجازة', onMissionToday:'في مأمورية',
+    totalOvertime:'إجمالي الإضافي (ساعة)', checkIn:'تسجيل الحضور',
+    checkOut:'تسجيل الانصراف', noData:'لا توجد بيانات',
+    actions:'الإجراءات', code:'الكود', nameAr:'الاسم بالعربي', nameEn:'الاسم بالإنجليزي',
+    department:'الإدارة', section:'القسم', date:'التاريخ',
+    from:'من', to:'إلى', hours:'ساعات', days:'أيام', minutes:'دقائق',
+    currentPassword:'كلمة المرور الحالية', newPassword:'كلمة المرور الجديدة',
+    confirmPassword:'تأكيد كلمة المرور', firstLoginAlert:'يجب تغيير كلمة المرور عند أول دخول',
+    deleteConfirm:'هل أنت متأكد من الحذف؟ لا يمكن التراجع.',
+    success:'تمّ بنجاح', error:'خطأ', warning:'تنبيه',
+    loading:'جاري التحميل...', processing:'جاري المعالجة...',
+    rememberMe:'تذكر اسم المستخدم',
+    sessionExpired:'انتهت الجلسة. يرجى تسجيل الدخول مجدداً',
+    reportType:'نوع التقرير', dateFrom:'من تاريخ', dateTo:'إلى تاريخ',
+    employee:'الموظف', allEmployees:'جميع الموظفين',
+    allDepartments:'جميع الإدارات', allSections:'جميع الأقسام',
+    generate:'عرض التقرير', exportPDF:'PDF', exportExcel:'Excel', exportCSV:'CSV',
+    workType:'نوع العمل', normal:'عادي', flexible:'مرن',
+    role:'الدور الوظيفي', active:'نشط', inactive:'غير نشط',
+    checkInTime:'وقت الحضور', checkOutTime:'وقت الانصراف',
+    workHours:'ساعات العمل', delayMins:'دقائق التأخير',
+    overtimeHours:'ساعات الإضافي',
+    balance:'الرصيد', consumed:'المستهلك', remaining:'المتبقي',
+    year:'السنة', notes:'ملاحظات', mobile:'الجوال', email:'البريد الإلكتروني',
+    jobGrade:'الدرجة الوظيفية', manager:'المدير', adminRole:'مدير النظام',
+    managerRole:'مدير قسم', employeeRole:'موظف',
+    // Extended set — covers dynamic pages
+    today:'اليوم', thisMonth:'هذا الشهر', allTime:'كل الفترات',
+    requiredFields:'جميع الحقول مطلوبة', selectOption:'-- اختر --',
+    overview:'نظرة عامة', summary:'ملخص', details:'تفاصيل',
+    monthlyBalance:'الرصيد الشهري', usedThisMonth:'المستخدم هذا الشهر',
+    permissionUsedAlert:'تم تسجيل إذن هذا الشهر بالفعل. الإذن متاح مرة واحدة فقط شهرياً.',
+    permissionMaxAlert:'الحد الأقصى لكل إذن',
+    autoCalcAlert:'سيتم حساب التأخير وساعات العمل والإضافي تلقائياً حسب إعدادات النظام',
+    leaveType:'نوع الإجازة', missionType:'نوع المأمورية',
+    addLeave:'إضافة إجازة', addMission:'إضافة مأمورية', addPermission:'إضافة إذن',
+    editLeave:'تعديل إجازة', editMission:'تعديل مأمورية', editPermission:'تعديل إذن',
+    addEmployee:'إضافة موظف', editEmployee:'تعديل موظف',
+    addUser:'إضافة مستخدم', editUser:'تعديل مستخدم',
+    addDepartment:'إضافة إدارة', editDepartment:'تعديل إدارة',
+    addSection:'إضافة قسم', editSection:'تعديل قسم',
+    addLeaveType:'إضافة نوع إجازة', editLeaveType:'تعديل نوع إجازة',
+    addMissionType:'إضافة نوع مأمورية', editMissionType:'تعديل نوع مأمورية',
+    addHoliday:'إضافة عطلة', editHoliday:'تعديل عطلة',
+    addBalance:'إضافة رصيد', editBalance:'تعديل رصيد',
+    addAttendance:'إضافة / تعديل حضور',
+    nameArabic:'الاسم بالعربي', nameEnglish:'الاسم بالإنجليزي',
+    sectionManager:'مدير القسم', allStatuses:'كل الحالات',
+    lastLogin:'آخر دخول', loginAttempts:'محاولات الدخول', locked:'مقفل', unlock:'فتح الحساب',
+    employeeData:'بيانات الموظف', leaveBalanceTitle:'أرصدة الإجازات',
+    consumedDays:'الأيام المستهلكة', remainingDays:'الأيام المتبقية', balanceDays:'الرصيد',
+    user:'المستخدم', table:'الجدول', record:'السجل', timestamp:'التاريخ والوقت',
+    last500:'آخر 500 عملية', allRecords:'كل السجلات',
+    workSettings:'ساعات العمل العادي', ramadanSettings:'ساعات العمل في رمضان',
+    overtimeSettings:'الإضافي والأذونات', payrollSettings:'دورة الرواتب والجلسة',
+    ramadanFromDate:'تاريخ بداية رمضان', ramadanToDate:'تاريخ نهاية رمضان',
+    ramadanRangeHint:'يتم تطبيق إعدادات رمضان تلقائياً على جميع الموظفين (Normal و Flexible) خلال هذه الفترة، بدون استثناءات.',
+    ramadanDateRangeError:'تاريخ بداية رمضان يجب أن يكون قبل أو يساوي تاريخ النهاية',
+    startTime:'وقت بداية العمل',
+    latestArrival:'آخر وقت حضور (مرن)', requiredHours:'ساعات العمل المطلوبة',
+    gracePeriod:'فترة السماح (دقائق)', overtimeStart:'بداية حساب الإضافي',
+    monthlyPermHours:'الحد الشهري للأذونات (ساعات)',
+    monthlyWorkHoursMissionCount:'عدد مأموريات "بدل ساعات" المسموح بها شهرياً',
+    monthlyWorkHoursMissionCountHint:'الحد الأقصى لعدد مرات تسجيل مأمورية من نوع "بدل ساعات" (MT001) لكل موظف في الشهر',
+    myMonthSummary:'ملخص الشهر الحالي', currentPeriod:'الفترة الحالية',
+    leaveDaysUsed:'أيام الإجازة المستخدمة', remainingLeaveBalance:'رصيد الإجازات المتبقي',
+    permissionsUsed:'الأذونات المستخدمة',
+    payrollStartDay:'يوم بداية دورة الرواتب', payrollEndDay:'يوم نهاية دورة الرواتب (تلقائي)',
+    payrollEndDaySuffix:'من الشهر التالي', payrollCycleHint:'يتم احتساب نهاية الدورة تلقائياً كاليوم السابق ليوم البداية في الشهر التالي. مثال: بداية يوم 20 ⇐ الدورة من 20 إلى 19 من الشهر التالي.',
+    sessionTimeout:'انتهاء الجلسة (دقائق)',
+    weeklyOffDays:'الإجازات الأسبوعية',
+    weekday_0:'الأحد', weekday_1:'الإثنين', weekday_2:'الثلاثاء', weekday_3:'الأربعاء',
+    weekday_4:'الخميس', weekday_5:'الجمعة', weekday_6:'السبت',
+    manualEntry:'تسجيل يدوي / بوقت محدد', selectDateTime:'اختر التاريخ والوقت',
+    recordSaved:'تم الحفظ بنجاح', recordDeleted:'تم الحذف بنجاح',
+    confirmDeleteGeneric:'هل أنت متأكد؟',
+    myReports:'تقاريري', attendanceReport:'تقرير الحضور والانصراف',
+    overtimeMissionReport:'تقرير الإضافي والمأموريات', leaveMissionPermReport:'تقرير الإجازات والأذونات والمأموريات',
+    totalOvertimeEarned:'إجمالي الإضافي', totalMissionHours:'إجمالي ساعات المأموريات',
+    overtimeDaysReview:'مراجعة أيام الإضافي',
+    netOvertimeRemaining:'صافي الإضافي المتبقي', selectPeriod:'اختر الفترة',
+    exportToExcel:'تصدير Excel', overtimeMissionBalance:'رصيد الإضافي والمأموريات',
+    employeeOvertimeSummary:'ملخص الإضافي لكل موظف',
+    last6Months:'آخر 6 أشهر', monthlyDelayLabel:'التأخير الشهري (دقائق)', monthlyOvertimeLabel:'الإضافي الشهري',
+    totalCount:'إجمالي', name:'الاسم', chooseEmployee:'الموظف', requireEmployeeCode:'الكود والاسم بالعربي مطلوبان',
+    chooseEmployeeRequired:'اختر الموظف', passwordLeaveBlank:'(اتركها فارغة للإبقاء على الحالية)',
+    departmentsTitle:'الإدارات', sectionsTitle:'الأقسام', codeLabel:'الكود',
+    leaveTypesTitle:'أنواع الإجازات', missionTypesTitle:'أنواع المأموريات',
+    requireNameAr:'الاسم بالعربي مطلوب', requireDeptNameAr:'الإدارة والاسم بالعربي مطلوبان',
+    requireDateName:'التاريخ والاسم مطلوبان', requireAllFieldsBalance:'جميع الحقول مطلوبة',
+    employeeRequiredField:'الموظف *', activeStatus:'الحالة', status:'الحالة',
+    pickFiltersHint:'اختر الفلاتر واضغط بحث', pickReportHint:'اختر التقرير واضغط بحث',
+    employeeAndDateRequired:'الموظف والتاريخ مطلوبان', resultsCount:'النتائج', recordsWord:'سجل',
+    fileExported:'تم تصدير الملف بنجاح',
+    rptDailyAttendance:'تقرير الحضور اليومي', rptMonthlyAttendance:'تقرير الحضور الشهري',
+    rptLate:'تقرير التأخير', rptOvertime:'تقرير الإضافي',
+    rptLeaveBalance:'تقرير أرصدة الإجازات', rptConsumedLeave:'تقرير الإجازات المستهلكة',
+    rptRemainingLeave:'تقرير الإجازات المتبقية', rptMission:'تقرير المأموريات',
+    rptPermission:'تقرير الأذونات', rptEmployeeMaster:'تقرير بيانات الموظفين',
+    officialHoliday:'عطلة رسمية', weeklyOff:'إجازة أسبوعية', onLeaveStatus:'في إجازة',
+    attendanceComplete:'✓ حضور مكتمل', presentAwaitingCheckout:'حاضر — في انتظار الانصراف',
+    noAttendanceRecorded:'لم يُسجَّل حضور', delayMinutesLabel:'دقائق التأخير', overtimeHoursChartLabel:'ساعات الإضافي',
+    delayToastPrefix:'تأخير', minuteSingular:'دقيقة', selectDateTimeAlert:'اختر التاريخ والوقت',
+    consumption:'الاستهلاك', dayWord:'يوم', availableBalance:'الرصيد المتاح',
+    monthlyLimitNote:'الحد الأقصى', oncePerMonthNote:'إذن واحد فقط في الشهر',
+    monthlyBalanceLabel:'الرصيد الشهري', usedThisMonthLabel:'المستخدم هذا الشهر', remainingLabel:'المتبقي',
+    permissionUsedThisMonth:'تم تسجيل إذن هذا الشهر بالفعل. الإذن متاح مرة واحدة فقط شهرياً.',
+    dayNamesAr:'الأحد,الإثنين,الثلاثاء,الأربعاء,الخميس,الجمعة,السبت', dayWordHeader:'اليوم',
+    noDelayLabel:'لا تأخير', confirmEditAttendanceMsg:'هل تريد تعديل سجل الحضور؟ سيتم فتح نموذج التعديل.',
+    permissionUsedTitle:'تم استهلاك إذن هذا الشهر',
+    changeLang:'تغيير اللغة', changeTheme:'تغيير المظهر', myAccount:'حسابي', mobilePreview:'معاينة على الموبايل',
+    pageTitle:'نظام الحضور والإجازات', loadingText:'جاري التحميل...',
+    expectedCheckOutTime:'وقت الانصراف المتوقع', upcomingOfficialHolidays:'الإجازات الرسمية القادمة',
+  },
+  en: {
+    systemName:'Attendance & Leave System', systemSub:'~ SYSORA ~',
+    loginSubtitle:'Sign in to continue', login:'Sign In', bioLoginBtn:'Sign in with fingerprint', credsRequired:'Username and password are required', loginFooter:'v3.0 © 2026 — Attendance & Leave System', devBy:'Developed By ~ SYSORA ~',
+    username:'Username', password:'Password',
+    logout:'Sign Out', dashboard:'Dashboard',
+    main:'Main', myData:'My Data', management:'Management', administration:'Administration',
+    myAttendance:'My Attendance', myLeaves:'My Leaves', myBalance:'My Balance',
+    myMissions:'My Missions', myPermissions:'My Permissions',
+    attendance:'Attendance', leaves:'Leaves', missions:'Missions',
+    permissions:'Permissions', reports:'Reports', employees:'Employees',
+    users:'Users', departments:'Departments & Sections', leaveTypes:'Leave Types',
+    holidays:'Official Holidays', leaveBalance:'Leave Balances',
+    auditLog:'Audit Log', settings:'Settings',
+    myProfile:'My Profile', changePassword:'Change Password',
+    resetPassword:'Reset Password',
+    resetPasswordConfirm:'The password will be reset to the default, and a change will be required at the next login. Continue?',
+    save:'Save', cancel:'Cancel', edit:'Edit', delete:'Delete', add:'Add',
+    confirm:'Confirm', search:'Search', filter:'Filter', export:'Export',
+    refresh:'Refresh', print:'Print',
+    totalEmployees:'Total Employees', presentToday:'Present Today',
+    absentToday:'Absent Today', lateToday:'Late Today',
+    onLeaveToday:'On Leave', onMissionToday:'On Mission',
+    totalOvertime:'Total Overtime (hrs)', checkIn:'Check In',
+    checkOut:'Check Out', noData:'No data available',
+    actions:'Actions', code:'Code', nameAr:'Name (Arabic)', nameEn:'Name (English)',
+    department:'Department', section:'Section', date:'Date',
+    from:'From', to:'To', hours:'Hours', days:'Days', minutes:'Minutes',
+    currentPassword:'Current Password', newPassword:'New Password',
+    confirmPassword:'Confirm Password', firstLoginAlert:'Please change your password on first login',
+    deleteConfirm:'Are you sure you want to delete? This cannot be undone.',
+    success:'Success', error:'Error', warning:'Warning',
+    loading:'Loading...', processing:'Processing...',
+    rememberMe:'Remember username',
+    sessionExpired:'Session expired. Please sign in again.',
+    reportType:'Report Type', dateFrom:'Date From', dateTo:'Date To',
+    employee:'Employee', allEmployees:'All Employees',
+    allDepartments:'All Departments', allSections:'All Sections',
+    generate:'Generate Report', exportPDF:'PDF', exportExcel:'Excel', exportCSV:'CSV',
+    workType:'Work Type', normal:'Normal', flexible:'Flexible',
+    role:'Role', active:'Active', inactive:'Inactive',
+    checkInTime:'Check-In Time', checkOutTime:'Check-Out Time',
+    workHours:'Work Hours', delayMins:'Delay (min)',
+    overtimeHours:'Overtime (hrs)',
+    balance:'Balance', consumed:'Consumed', remaining:'Remaining',
+    year:'Year', notes:'Notes', mobile:'Mobile', email:'Email',
+    jobGrade:'Job Grade', manager:'Manager', adminRole:'System Admin',
+    managerRole:'Department Manager', employeeRole:'Employee',
+    // Extended set — covers dynamic pages
+    today:'Today', thisMonth:'This Month', allTime:'All Time',
+    requiredFields:'All fields are required', selectOption:'-- Select --',
+    overview:'Overview', summary:'Summary', details:'Details',
+    monthlyBalance:'Monthly Balance', usedThisMonth:'Used This Month',
+    permissionUsedAlert:'A permission has already been used this month. Only one permission is allowed per month.',
+    permissionMaxAlert:'Maximum per permission',
+    autoCalcAlert:'Delay, work hours and overtime will be calculated automatically based on system settings',
+    leaveType:'Leave Type', missionType:'Mission Type',
+    addLeave:'Add Leave', addMission:'Add Mission', addPermission:'Add Permission',
+    editLeave:'Edit Leave', editMission:'Edit Mission', editPermission:'Edit Permission',
+    addEmployee:'Add Employee', editEmployee:'Edit Employee',
+    addUser:'Add User', editUser:'Edit User',
+    addDepartment:'Add Department', editDepartment:'Edit Department',
+    addSection:'Add Section', editSection:'Edit Section',
+    addLeaveType:'Add Leave Type', editLeaveType:'Edit Leave Type',
+    addMissionType:'Add Mission Type', editMissionType:'Edit Mission Type',
+    addHoliday:'Add Holiday', editHoliday:'Edit Holiday',
+    addBalance:'Add Balance', editBalance:'Edit Balance',
+    addAttendance:'Add / Edit Attendance',
+    nameArabic:'Name (Arabic)', nameEnglish:'Name (English)',
+    sectionManager:'Section Manager', allStatuses:'All Statuses',
+    lastLogin:'Last Login', loginAttempts:'Login Attempts', locked:'Locked', unlock:'Unlock Account',
+    employeeData:'Employee Data', leaveBalanceTitle:'Leave Balances',
+    consumedDays:'Consumed Days', remainingDays:'Remaining Days', balanceDays:'Balance',
+    user:'User', table:'Table', record:'Record', timestamp:'Date & Time',
+    last500:'Last 500 operations', allRecords:'All Records',
+    workSettings:'Normal Work Hours', ramadanSettings:'Ramadan Work Hours',
+    overtimeSettings:'Overtime & Permissions', payrollSettings:'Payroll Cycle & Session',
+    ramadanFromDate:'Ramadan Start Date', ramadanToDate:'Ramadan End Date',
+    ramadanRangeHint:'Ramadan settings apply automatically to all employees (Normal and Flexible) during this period, with no exceptions.',
+    ramadanDateRangeError:'Ramadan start date must be before or equal to the end date',
+    startTime:'Work Start Time',
+    latestArrival:'Latest Arrival Time (Flexible)', requiredHours:'Required Work Hours',
+    gracePeriod:'Grace Period (minutes)', overtimeStart:'Overtime Start Time',
+    monthlyPermHours:'Monthly Permission Limit (hours)',
+    monthlyWorkHoursMissionCount:'"Work Hours Mission" allowed count per month',
+    monthlyWorkHoursMissionCountHint:'Maximum number of "Work Hours Mission" (MT001) entries per employee per month',
+    myMonthSummary:'Current Month Summary', currentPeriod:'Current Period',
+    leaveDaysUsed:'Leave Days Used', remainingLeaveBalance:'Remaining Leave Balance',
+    permissionsUsed:'Permissions Used',
+    payrollStartDay:'Payroll Cycle Start Day', payrollEndDay:'Payroll Cycle End Day (auto)',
+    payrollEndDaySuffix:'of next month', payrollCycleHint:'The cycle end date is calculated automatically as the day before the start day, in the following month. Example: start day 20 ⇒ cycle runs from the 20th to the 19th of the next month.',
+    sessionTimeout:'Session Timeout (minutes)',
+    weeklyOffDays:'Weekly Off Days',
+    weekday_0:'Sunday', weekday_1:'Monday', weekday_2:'Tuesday', weekday_3:'Wednesday',
+    weekday_4:'Thursday', weekday_5:'Friday', weekday_6:'Saturday',
+    manualEntry:'Manual / Custom Time Entry', selectDateTime:'Select date and time',
+    recordSaved:'Saved successfully', recordDeleted:'Deleted successfully',
+    confirmDeleteGeneric:'Are you sure?',
+    myReports:'My Reports', attendanceReport:'Attendance Report',
+    overtimeMissionReport:'Overtime & Missions Report', leaveMissionPermReport:'Leaves, Permissions & Missions Report',
+    totalOvertimeEarned:'Total Overtime', totalMissionHours:'Total Mission Hours',
+    overtimeDaysReview:'Overtime Days Review',
+    netOvertimeRemaining:'Net Overtime Remaining', selectPeriod:'Select Period',
+    exportToExcel:'Export Excel', overtimeMissionBalance:'Overtime & Mission Balance',
+    employeeOvertimeSummary:'Overtime Summary per Employee',
+    last6Months:'Last 6 Months', monthlyDelayLabel:'Monthly Delay (min)', monthlyOvertimeLabel:'Monthly Overtime',
+    totalCount:'Total', name:'Name', chooseEmployee:'Employee', requireEmployeeCode:'Code and Arabic name are required',
+    chooseEmployeeRequired:'Select employee', passwordLeaveBlank:'(leave blank to keep current)',
+    departmentsTitle:'Departments', sectionsTitle:'Sections', codeLabel:'Code',
+    leaveTypesTitle:'Leave Types', missionTypesTitle:'Mission Types',
+    requireNameAr:'Arabic name is required', requireDeptNameAr:'Department and Arabic name are required',
+    requireDateName:'Date and name are required', requireAllFieldsBalance:'All fields are required',
+    employeeRequiredField:'Employee *', activeStatus:'Status', status:'Status',
+    pickFiltersHint:'Choose filters and click search', pickReportHint:'Choose a report and click search',
+    employeeAndDateRequired:'Employee and date are required', resultsCount:'Results', recordsWord:'records',
+    fileExported:'File exported successfully',
+    rptDailyAttendance:'Daily Attendance Report', rptMonthlyAttendance:'Monthly Attendance Report',
+    rptLate:'Late Report', rptOvertime:'Overtime Report',
+    rptLeaveBalance:'Leave Balance Report', rptConsumedLeave:'Consumed Leave Report',
+    rptRemainingLeave:'Remaining Leave Report', rptMission:'Mission Report',
+    rptPermission:'Permission Report', rptEmployeeMaster:'Employee Master Report',
+    officialHoliday:'Official Holiday', weeklyOff:'Weekly Off', onLeaveStatus:'On Leave',
+    attendanceComplete:'✓ Attendance Complete', presentAwaitingCheckout:'Present — Awaiting Checkout',
+    noAttendanceRecorded:'No Attendance Recorded', delayMinutesLabel:'Delay Minutes', overtimeHoursChartLabel:'Overtime Hours',
+    delayToastPrefix:'Delay', minuteSingular:'minute', selectDateTimeAlert:'Please select date and time',
+    consumption:'Consumption', dayWord:'day', availableBalance:'Available Balance',
+    monthlyLimitNote:'Maximum', oncePerMonthNote:'Only one permission allowed per month',
+    monthlyBalanceLabel:'Monthly Balance', usedThisMonthLabel:'Used This Month', remainingLabel:'Remaining',
+    permissionUsedThisMonth:'A permission has already been used this month. Only one is allowed per month.',
+    dayNamesAr:'Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday', dayWordHeader:'Day',
+    noDelayLabel:'No Delay', confirmEditAttendanceMsg:'Edit attendance record? This will open the edit form.',
+    permissionUsedTitle:'Permission already used this month',
+    changeLang:'Change Language', changeTheme:'Change Theme', myAccount:'My Account', mobilePreview:'Mobile Preview',
+    pageTitle:'Attendance & Leave System', loadingText:'Loading...',
+    expectedCheckOutTime:'Expected Check-Out Time', upcomingOfficialHolidays:'Upcoming Official Holidays',
+  }
+};
+
+function t(key) {
+  return (I18N[APP.lang] && I18N[APP.lang][key]) || I18N['ar'][key] || key;
+}
+
+// ── Init ─────────────────────────────────────────────────────
+
+// PWA: register the service worker (served from this same Apps Script URL —
+// see doGet() in Code.gs) so the browser treats the app as "installable"
+// (Add to Home Screen on Android, install icon in desktop Chrome/Edge).
+// It doesn't cache anything — the app always needs a live connection to
+// Google Sheets — it only needs to exist and handle fetch to satisfy the
+// installability criteria.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('?pwa=sw').catch(() => {
+      // Installability is a nice-to-have, not critical — fail silently if
+      // the browser/environment doesn't support it (e.g. inside an iframe).
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(APP.theme);
+  applyLang(APP.lang);
+
+  // Track real user activity (mouse/keyboard/touch) so the session timeout is
+  // based on inactivity, not on a fixed duration since login.
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+    document.addEventListener(evt, markActivity, { passive: true });
+  });
+
+  const savedSession = JSON.parse(sessionStorage.getItem('appSession') || 'null');
+  if (savedSession && savedSession.token) {
+    APP.session = savedSession;
+    bootApp();
+  } else {
+    showLogin();
+  }
+
+  hideLoader();
+});
+
+function markActivity() {
+  APP.lastActivityTime = Date.now();
+}
+
+function hideLoader() {
+  setTimeout(() => {
+    const loader = document.getElementById('globalLoader');
+    if (loader) loader.classList.add('hidden');
+    // يبلّغ تطبيق الأندرويد إن الصفحة جاهزة (علشان تختفي شاشة البداية)
+    try { if (window.AndroidBridge && AndroidBridge.appReady) AndroidBridge.appReady(); } catch (e) {}
+  }, 800);
+}
+
+// ── API Communication ─────────────────────────────────────────
+
+async function api(action, payload = {}) {
+  const body = { action, payload };
+  if (APP.session) body.token = APP.session.token;
+  markActivity();
+
+  return new Promise((resolve) => {
+    google.script.run
+      .withSuccessHandler((result) => {
+        try {
+          const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+          if (!parsed.success && parsed.error === 'SESSION_EXPIRED') {
+            showToast(t('sessionExpired'), 'warning');
+            SFX.sessionExpired();
+            doLogout();
+          }
+          resolve(parsed);
+        } catch (e) {
+          resolve({ success: false, message: e.message });
+        }
+      })
+      .withFailureHandler((err) => {
+        resolve({ success: false, message: err.message || 'Server error' });
+      })
+      .handleRequest(JSON.stringify(body));
+  });
+}
+
+// ── Default report date range (current payroll cycle) ─────────
+// Used to default every "Date From / Date To" search filter across the app
+// to the CURRENT payroll cycle (e.g. 20th of last month → 19th of this
+// month, per Settings → Payroll Cycle Start Day) instead of an arbitrary
+// hardcoded range. Cached for the lifetime of the session since it only
+// changes once the payroll cycle rolls over.
+async function getDefaultDateRange() {
+  if (APP._defaultReportPeriod) return APP._defaultReportPeriod;
+  const res = await api('getDefaultReportPeriod', {});
+  APP._defaultReportPeriod = res.success
+    ? { from: res.data.dateFrom, to: res.data.dateTo }
+    : { from: '', to: '' };
+  return APP._defaultReportPeriod;
+}
+
+// Cached system Settings (required hours, grace period, Ramadan dates...) —
+// used client-side for quick estimates (e.g. suggesting a check-out time)
+// without a round-trip on every keystroke. The server always recomputes the
+// authoritative delay/overtime on save regardless of this client estimate.
+async function getCachedSettings() {
+  if (APP._settingsCache) return APP._settingsCache;
+  const res = await api('getSettings', {});
+  APP._settingsCache = res.success ? res.data : {};
+  return APP._settingsCache;
+}
+
+// ── Auth ──────────────────────────────────────────────────────
+
+// Real <form> submit handler (not a "javascript:" action) — this lets the
+// browser's own password manager correctly recognize the form submission
+// (username + password values) and, once bootApp() replaces the login form
+// on success, treat it as a completed login and offer to save the password.
+function handleLoginSubmit(event) {
+  event.preventDefault();
+  doLogin();
+  return false;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// Biometric (fingerprint) — works ONLY inside the Android APK, which
+// exposes window.AndroidBridge. In a normal browser everything below is
+// inert (BIO.available() is false) and nothing is shown.
+// The bridge is asynchronous: we start an operation with a request id and
+// poll for its result (the page runs inside a sandboxed iframe, so the
+// native side can't call back into it directly).
+// ══════════════════════════════════════════════════════════════
+const BIO = {
+  T: {
+    ar: { punchTitle:'تسجيل الحضور / الانصراف بالبصمة', in:'حضور', out:'انصراف',
+          confirmIn:'تأكيد تسجيل الحضور', confirmOut:'تأكيد تسجيل الانصراف', punchSub:'ضع إصبعك على قارئ البصمة',
+          noRecord:'لا يوجد تسجيل لهذا اليوم', done:'تم التسجيل بنجاح', failed:'فشل التحقق بالبصمة',
+          noneEnrolled:'لا توجد بصمة مسجلة على هذا الجهاز. أضف بصمتك من إعدادات الموبايل لاستخدام التسجيل بالبصمة.',
+          offer:'هل تريد تفعيل الدخول بالبصمة على هذا الجهاز؟', enabled:'تم تفعيل الدخول بالبصمة', notEnabled:'لم يتم تفعيل الدخول بالبصمة',
+          credsStale:'بيانات الدخول المحفوظة لم تعد صالحة، ادخل بكلمة المرور ثم فعّل البصمة من جديد',
+          invalidated:'تغيرت البصمات المسجلة على الجهاز، ادخل بكلمة المرور ثم فعّل البصمة من جديد',
+          loginBtn:'الدخول بالبصمة', disable:'إلغاء الدخول بالبصمة', enable:'تفعيل الدخول بالبصمة',
+          disabledMsg:'تم إلغاء الدخول بالبصمة', enableHelp:'سجّل الخروج ثم ادخل بكلمة المرور وسيظهر لك سؤال التفعيل' },
+    en: { punchTitle:'Fingerprint Check-in / Check-out', in:'Check-in', out:'Check-out',
+          confirmIn:'Confirm check-in', confirmOut:'Confirm check-out', punchSub:'Place your finger on the sensor',
+          noRecord:'No record for today', done:'Recorded successfully', failed:'Fingerprint verification failed',
+          noneEnrolled:'No fingerprint is enrolled on this device. Add one in phone settings to use fingerprint punching.',
+          offer:'Enable fingerprint login on this device?', enabled:'Fingerprint login enabled', notEnabled:'Fingerprint login was not enabled',
+          credsStale:'Saved login is no longer valid. Sign in with your password and enable fingerprint again',
+          invalidated:'Fingerprints on this device changed. Sign in with your password and enable fingerprint again',
+          loginBtn:'Sign in with fingerprint', disable:'Disable fingerprint login', enable:'Enable fingerprint login',
+          disabledMsg:'Fingerprint login disabled', enableHelp:'Sign out, then sign in with your password and you will be asked to enable it' }
+  },
+  s(k) { return (this.T[APP.lang] || this.T.ar)[k]; },
+  bridge() {
+    try { return (window.AndroidBridge && typeof window.AndroidBridge.biometricStatus === 'function') ? window.AndroidBridge : null; }
+    catch (e) { return null; }
+  },
+  status() { const b = this.bridge(); if (!b) return 'nobridge'; try { return b.biometricStatus(); } catch (e) { return 'nobridge'; } },
+  available() { return this.status() === 'ok'; },
+  hasCreds() { const b = this.bridge(); try { return !!(b && b.bioHasCredentials()); } catch (e) { return false; } },
+  poll(id, ms) {
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      const iv = setInterval(() => {
+        let r = '';
+        try { r = window.AndroidBridge.biometricResult(id); } catch (e) { r = 'fail:bridge'; }
+        if (r) { clearInterval(iv); resolve(r); }
+        else if (Date.now() - t0 > (ms || 90000)) { clearInterval(iv); resolve('fail:timeout'); }
+      }, 250);
+    });
+  },
+  async verify(title, sub) {
+    const id = 'v' + Date.now() + Math.random().toString(36).slice(2, 6);
+    window.AndroidBridge.biometricAuth(id, title, sub || '');
+    return this.poll(id);
+  }
+};
+
+// ── Fingerprint login ──────────────────────────────────────────
+function bioRenderLoginButton() {
+  const btn = document.getElementById('bioLoginBtn');
+  if (!btn) return;
+  if (BIO.available() && BIO.hasCreds()) {
+    btn.classList.remove('d-none');
+    const lbl = document.getElementById('bioLoginLabel'); if (lbl) lbl.textContent = BIO.s('loginBtn');
+    try {
+      const u = document.getElementById('loginUsername');
+      if (u && !u.value) u.value = window.AndroidBridge.bioSavedUsername() || '';
+    } catch (e) {}
+  } else {
+    btn.classList.add('d-none');
+  }
+}
+
+async function bioLogin() {
+  const id = 'u' + Date.now();
+  window.AndroidBridge.bioUnlock(id);
+  const r = await BIO.poll(id);
+  if (r.startsWith('ok:')) {
+    let c;
+    try { c = JSON.parse(r.slice(3)); } catch (e) { return; }
+    document.getElementById('loginUsername').value = c.u;
+    document.getElementById('loginPassword').value = c.p;
+    await doLogin();
+    document.getElementById('loginPassword').value = '';
+    if (!APP.session) {   // الدخول فشل (مثلاً الباسورد اتغير) → امسح البيانات المحفوظة
+      try { window.AndroidBridge.bioClearCredentials(); } catch (e) {}
+      showToast(BIO.s('credsStale'), 'warning');
+      bioRenderLoginButton();
+    }
+  } else if (r === 'fail:invalidated') {
+    showToast(BIO.s('invalidated'), 'warning');
+    bioRenderLoginButton();
+  } else if (r !== 'cancel') {
+    showToast(BIO.s('failed'), 'danger');
+  }
+}
+
+async function bioOfferEnable(username, password) {
+  if (!BIO.available()) return;
+  let saved = '';
+  try { saved = window.AndroidBridge.bioSavedUsername() || ''; } catch (e) {}
+  if (BIO.hasCreds() && saved.toLowerCase() === String(username).toLowerCase()) return;
+  if (localStorage.getItem('bioDeclined_' + username) === '1') return;
+  const yes = await confirmDialog(BIO.s('offer'));
+  if (!yes) { localStorage.setItem('bioDeclined_' + username, '1'); return; }
+  const id = 's' + Date.now();
+  window.AndroidBridge.bioSaveCredentials(id, username, password);
+  const r = await BIO.poll(id);
+  showToast(r === 'ok' ? BIO.s('enabled') : BIO.s('notEnabled'), r === 'ok' ? 'success' : 'warning');
+}
+
+function bioDisableLogin() {
+  try { window.AndroidBridge.bioClearCredentials(); } catch (e) {}
+  showToast(BIO.s('disabledMsg'), 'success');
+  bioPunchInit(true);
+}
+function bioEnableHelp() {
+  try { localStorage.removeItem('bioDeclined_' + APP.session.username); } catch (e) {}
+  showToast(BIO.s('enableHelp'), 'info');
+}
+
+// ── Fingerprint check-in / check-out card ──────────────────────
+function bioPunchCardHtml() {
+  const st = BIO.status();
+  if (st === 'none_enrolled') return `<div class="alert alert-warning small mb-3">${BIO.s('noneEnrolled')}</div>`;
+  if (st !== 'ok') return '';   // normal browser → no card
+  setTimeout(() => bioPunchInit(false), 50);
+  return `
+    <div class="card mb-3" id="bioPunchCard"><div class="card-body text-center">
+      <div class="fw-bold mb-3">${BIO.s('punchTitle')}</div>
+      <div class="btn-group w-100 mb-3" role="group">
+        <button type="button" class="btn btn-outline-success" id="bioModeIn"  onclick="bioSetMode('in')">${BIO.s('in')}</button>
+        <button type="button" class="btn btn-outline-danger"  id="bioModeOut" onclick="bioSetMode('out')">${BIO.s('out')}</button>
+      </div>
+      <button type="button" id="bioPunchBtn" class="btn btn-primary rounded-circle d-inline-flex align-items-center justify-content-center"
+              style="width:110px;height:110px" onclick="bioPunch()">
+        <span class="material-icons-round" style="font-size:64px">fingerprint</span>
+      </button>
+      <div class="mt-3 small" id="bioPunchStatus"></div>
+      <div class="mt-2" id="bioLoginToggle"></div>
+    </div></div>`;
+}
+
+function bioSetMode(m) {
+  APP._bioMode = m;
+  const bi = document.getElementById('bioModeIn'), bo = document.getElementById('bioModeOut');
+  if (!bi || !bo) return;
+  bi.className = 'btn ' + (m === 'in'  ? 'btn-success' : 'btn-outline-success');
+  bo.className = 'btn ' + (m === 'out' ? 'btn-danger'  : 'btn-outline-danger');
+}
+
+function bioRenderStatus(att) {
+  const el = document.getElementById('bioPunchStatus');
+  if (!el) return;
+  if (!att || !att.CheckInTime) { el.textContent = BIO.s('noRecord'); return; }
+  el.innerHTML = `${BIO.s('in')}: <strong>${String(att.CheckInTime).slice(0, 5)}</strong>`
+    + (att.CheckOutTime ? ` · ${BIO.s('out')}: <strong>${String(att.CheckOutTime).slice(0, 5)}</strong>` : '')
+    + (att.AttendanceDate ? ` — ${att.AttendanceDate}` : '');
+}
+
+async function bioPunchInit(onlyToggle) {
+  if (!document.getElementById('bioPunchCard')) return;
+  const tg = document.getElementById('bioLoginToggle');
+  if (tg) {
+    tg.innerHTML = BIO.hasCreds()
+      ? `<button class="btn btn-sm btn-link text-secondary" onclick="bioDisableLogin()">${BIO.s('disable')}</button>`
+      : `<button class="btn btn-sm btn-link text-secondary" onclick="bioEnableHelp()">${BIO.s('enable')}</button>`;
+  }
+  if (onlyToggle) return;
+  const res = await api('getTodayStatus', {});
+  const att = (res.success && res.data) ? res.data.attendance : null;
+  bioRenderStatus(att);
+  bioSetMode(att && att.CheckInTime && !att.CheckOutTime ? 'out' : 'in');
+}
+
+async function bioPunch() {
+  const btn = document.getElementById('bioPunchBtn');
+  if (!btn || btn.disabled) return;
+  const mode = APP._bioMode || 'in';
+  btn.disabled = true;
+  try {
+    const r = await BIO.verify(mode === 'in' ? BIO.s('confirmIn') : BIO.s('confirmOut'), BIO.s('punchSub'));
+    if (r !== 'ok') { if (r !== 'cancel') showToast(BIO.s('failed'), 'danger'); return; }
+    // التاريخ والوقت بيتسجلوا من السيرفر نفسه (مش من الموبايل)
+    const res = await api(mode === 'in' ? 'checkIn' : 'checkOut', {});
+    if (res.success) {
+      SFX.checkIn();
+      showToast(res.message || BIO.s('done'), 'success');
+      if (mode === 'in' && res.data && res.data.delayMinutes > 0) {
+        showToast(`${t('delayToastPrefix')}: ${res.data.delayMinutes} ${t('minutes')}`, 'warning');
+      }
+      if (typeof bustDashboardCache === 'function') bustDashboardCache();
+      const st = await api('getTodayStatus', {});
+      bioRenderStatus((st.success && st.data) ? st.data.attendance : null);
+      if (mode === 'in') bioSetMode('out');
+    } else {
+      showToast(res.message || t('error'), 'danger');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
+// ── Android back button ───────────────────────────────────────
+// Native side sets a flag when Back is pressed; we poll for it, because the
+// page runs in a sandboxed iframe that native code can't call directly.
+function appHandleBack() {
+  const m = document.querySelector('.modal.show');
+  if (m) {
+    if (m.getAttribute('data-bs-backdrop') === 'static' && m.id !== 'appConfirmModal') return true; // لا تغلق نافذة إجبارية
+    try { bootstrap.Modal.getInstance(m).hide(); } catch (e) {}
+    return true;
+  }
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('open')) { toggleSidebar(); return true; }
+  if (APP.session && APP._navStack && APP._navStack.length) {
+    const p = APP._navStack.pop();
+    APP._navBack = true;
+    navigateTo(p);
+    return true;
+  }
+  return false;
+}
+(function startBackPolling() {
+  try {
+    if (!(window.AndroidBridge && AndroidBridge.consumeBack)) return;
+    setInterval(() => {
+      try {
+        if (AndroidBridge.consumeBack()) {
+          if (!appHandleBack()) AndroidBridge.backUnhandled();
+        }
+      } catch (e) {}
+    }, 200);
+  } catch (e) {}
+})();
+
+// ── Auto fingerprint prompt together with the login screen ────
+async function bioAutoPrompt() {
+  if (!BIO.available() || !BIO.hasCreds() || APP._bioPrompting) return;
+  APP._bioPrompting = true;
+  try {
+    for (let i = 0; i < 45; i++) {          // استنى لحد ما شاشة اللوجو تخلص
+      let done = true;
+      try { done = window.AndroidBridge.splashDone(); } catch (e) {}
+      if (done) break;
+      await new Promise(r => setTimeout(r, 200));
+    }
+    await new Promise(r => setTimeout(r, 300));
+    if (APP.session) return;
+    await bioLogin();
+  } finally {
+    APP._bioPrompting = false;
+  }
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl    = document.getElementById('loginError');
+  const btn      = document.getElementById('loginBtn');
+  const remember = document.getElementById('rememberMe');
+
+  if (!username || !password) {
+    errEl.textContent = t('credsRequired');
+    errEl.classList.remove('d-none');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="material-icons-round">hourglass_top</span><span data-i18n="loading">${t('loading')}</span>`;
+
+  const res = await api('login', { username, password });
+
+  btn.disabled = false;
+  btn.innerHTML = `<span class="material-icons-round">login</span><span data-i18n="login">${t('login')}</span>`;
+
+  if (res.success) {
+    // Save or clear remembered username
+    if (remember && remember.checked) {
+      localStorage.setItem('rememberedUsername', username);
+      localStorage.setItem('rememberMe', 'true');
+    } else {
+      localStorage.removeItem('rememberedUsername');
+      localStorage.setItem('rememberMe', 'false');
+    }
+    SFX.loginSuccess();
+    errEl.classList.add('d-none');
+    APP.session = { ...res.user, token: res.token };
+    sessionStorage.setItem('appSession', JSON.stringify(APP.session));
+    bootApp();
+    if (!res.user.firstLogin) { setTimeout(() => { try { bioOfferEnable(username, password); } catch (e) {} }, 1500); }
+    if (res.user.firstLogin) {
+      setTimeout(() => {
+        new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+      }, 600);
+    }
+  } else {
+    SFX.loginError();
+    errEl.textContent = res.message || t('error');
+    errEl.classList.remove('d-none');
+  }
+}
+
+// Press-and-hold password visibility: shows the plaintext only while the icon
+// is actively pressed (mouse held down / finger touching), and hides it again
+// the moment the press ends — never a persistent toggle. Guards against
+// double-firing when a touch event also triggers a synthesized mouse event.
+function showPassword(inputId, iconId) {
+  const el   = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!el || !icon || el.type === 'text') return;
+  el.type = 'text';
+  icon.textContent = 'visibility_off';
+}
+
+function hidePassword(inputId, iconId) {
+  const el   = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!el || !icon || el.type === 'password') return;
+  el.type = 'password';
+  icon.textContent = 'visibility';
+}
+
+async function doLogout() {
+  SFX.logout();
+  if (APP.session) await api('logout', { token: APP.session.token });
+  clearInterval(APP.sessionTimer);
+  clearInterval(APP.clockTimer);
+  APP.session = null;
+  APP._navLive = false; APP._navStack = [];
+  sessionStorage.removeItem('appSession');
+
+  // Clear any leftover credentials from the login form
+  const userEl = document.getElementById('loginUsername');
+  const passEl = document.getElementById('loginPassword');
+  if (userEl) userEl.value = '';
+  if (passEl) passEl.value = '';
+
+  showLogin();
+}
+
+async function submitChangePassword() {
+  const oldP = document.getElementById('cpOld').value;
+  const newP = document.getElementById('cpNew').value;
+  const con  = document.getElementById('cpConfirm').value;
+
+  if (newP !== con) { showToast('كلمتا المرور غير متطابقتين', 'danger'); return; }
+  if (newP.length < 8) { showToast('كلمة المرور يجب أن تكون 8 أحرف على الأقل', 'danger'); return; }
+
+  const res = await api('changePassword', { oldPassword: oldP, newPassword: newP });
+  if (res.success) {
+    showToast(res.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+    APP.session.firstLogin = false;
+    sessionStorage.setItem('appSession', JSON.stringify(APP.session));
+  } else {
+    showToast(res.message, 'danger');
+  }
+}
+
+function openChangePassword() {
+  document.getElementById('cpOld').value = '';
+  document.getElementById('cpNew').value = '';
+  document.getElementById('cpConfirm').value = '';
+  new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+}
+
+// ── App Boot ──────────────────────────────────────────────────
+
+function bootApp() {
+  document.getElementById('loginPage').classList.add('d-none');
+  document.getElementById('mainApp').classList.remove('d-none');
+
+  // Set user info
+  const u = APP.session;
+  const nameField = APP.lang === 'ar' ? u.nameAr : u.nameEn;
+  const _initialStr = [u.nameEn, u.username, u.nameAr, 'U'].join(' ');
+  const _latinMatch = _initialStr.match(/[A-Za-z]/);
+  const _initial = _latinMatch ? _latinMatch[0].toUpperCase() : 'U';
+  document.getElementById('userInitial').textContent = _initial;
+  document.getElementById('dropdownUserName').textContent = nameField || u.username;
+  document.getElementById('dropdownUserCode').textContent = u.employeeCode;
+  document.getElementById('dropdownUserRole').textContent =
+    u.role === 'Admin' ? t('adminRole') : u.role === 'Manager' ? t('managerRole') : t('employeeRole');
+
+  // Show role-based nav items
+  document.querySelectorAll('.nav-role-manager').forEach(el => {
+    el.classList.toggle('d-none', !['Admin','Manager'].includes(u.role));
+  });
+  document.querySelectorAll('.nav-role-admin').forEach(el => {
+    el.classList.toggle('d-none', u.role !== 'Admin');
+  });
+
+  // Start clock
+  startClock();
+  // Start session countdown
+  startSessionTimer();
+  // Navigate to My Profile (the landing page after login)
+  navigateTo('myProfile');
+}
+
+function showLogin() {
+  document.getElementById('mainApp').classList.add('d-none');
+  document.getElementById('loginPage').classList.remove('d-none');
+  translatePage();
+
+  // Restore remembered username if saved
+  const remembered = localStorage.getItem('rememberedUsername');
+  const rememberFlag = localStorage.getItem('rememberMe') === 'true';
+  const usernameEl = document.getElementById('loginUsername');
+  const rememberEl = document.getElementById('rememberMe');
+  if (usernameEl && remembered && rememberFlag) {
+    usernameEl.value = remembered;
+    if (rememberEl) rememberEl.checked = true;
+    // Focus password field directly
+    setTimeout(() => { const p = document.getElementById('loginPassword'); if (p) p.focus(); }, 100);
+  } else {
+    if (rememberEl) rememberEl.checked = false;
+  }
+  try { bioRenderLoginButton(); } catch (e) {}
+  try { bioAutoPrompt(); } catch (e) {}
+}
+
+// ── Clock & Session ───────────────────────────────────────────
+
+function startClock() {
+  function tick() {
+    const el = document.getElementById('liveClock');
+    if (el) el.textContent = new Date().toLocaleTimeString(APP.lang === 'ar' ? 'ar-EG' : 'en-US');
+  }
+  tick();
+  APP.clockTimer = setInterval(tick, 1000);
+}
+
+function startSessionTimer() {
+  clearInterval(APP.sessionTimer);
+  markActivity(); // reset the inactivity clock at the start of each session
+
+  APP.sessionTimer = setInterval(() => {
+    if (!APP.session) return;
+    try {
+      const timeoutMins = parseInt(APP.session.sessionTimeoutMinutes) || 60;
+      const idleMs = Date.now() - APP.lastActivityTime;
+      if (idleMs >= timeoutMins * 60 * 1000) {
+        clearInterval(APP.sessionTimer);
+        SFX.sessionExpired();
+        showToast(t('sessionExpired'), 'warning');
+        doLogout();
+      }
+    } catch(e) { console.error('Session timer error:', e); }
+  }, 30000); // check every 30s for responsive inactivity detection
+}
+
+// ── Navigation ────────────────────────────────────────────────
+
+function navigateTo(page) {
+  if (APP._navLive && !APP._navBack && APP.currentPage && APP.currentPage !== page) {
+    (APP._navStack = APP._navStack || []).push(APP.currentPage);
+  }
+  APP._navBack = false;
+  APP._navLive = true;
+  if (APP.currentPage !== page) SFX.navigate();
+  APP.currentPage = page;
+  // Update sidebar active
+  document.querySelectorAll('.nav-item-link').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  // Update topbar title
+  const titleEl = document.getElementById('topbarTitle');
+  if (titleEl) titleEl.textContent = t(page) || page;
+
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.add('d-none');
+
+  // Render page
+  renderPage(page);
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const isOpen = sidebar.classList.contains('open');
+  isOpen ? SFX.sidebarClose() : SFX.sidebarOpen();
+  sidebar.classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('d-none');
+}
+
+// ── Theme & Lang ──────────────────────────────────────────────
+
+function toggleTheme() {
+  SFX.themeToggle();
+  APP.theme = APP.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('theme', APP.theme);
+  applyTheme(APP.theme);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon1 = document.getElementById('themeIcon');
+  const icon2 = document.getElementById('themeIconTop');
+  const ic = theme === 'dark' ? 'light_mode' : 'dark_mode';
+  if (icon1) icon1.textContent = ic;
+  if (icon2) icon2.textContent = ic;
+}
+
+function toggleLang() {
+  SFX.langToggle();
+  APP.lang = APP.lang === 'ar' ? 'en' : 'ar';
+  localStorage.setItem('lang', APP.lang);
+  applyLang(APP.lang);
+  // Re-render current page
+  if (APP.session) navigateTo(APP.currentPage);
+}
+
+function applyLang(lang) {
+  const isAr = lang === 'ar';
+  document.documentElement.lang = lang;
+  document.documentElement.dir  = isAr ? 'rtl' : 'ltr';
+  const label = document.getElementById('langBtnLabel');
+  if (label) label.textContent = isAr ? 'A' : 'ع';
+  try { if (window.AndroidBridge && AndroidBridge.setLang) AndroidBridge.setLang(lang); } catch (e) {}
+  translatePage();
+}
+
+function translatePage() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (key) el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.dataset.i18nTitle;
+    if (key) el.setAttribute('title', t(key));
+  });
+  document.title = t('pageTitle');
+  const loaderText = document.getElementById('loaderText');
+  if (loaderText) loaderText.textContent = t('loadingText');
+}
+
+// ── Toast Notifications ───────────────────────────────────────
+
+function showToast(message, type = 'success', duration = 4000) {
+  // Play sound based on toast type
+  if      (type === 'success') SFX.success();
+  else if (type === 'danger')  SFX.error();
+  else if (type === 'warning') SFX.warning();
+  else if (type === 'info')    SFX.info();
+
+  const container = document.getElementById('toastContainer');
+  const id = 'toast_' + Date.now();
+  const icons = { success: 'check_circle', danger: 'error', warning: 'warning', info: 'info' };
+  const colors = { success: '#10b981', danger: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
+
+  const html = `
+    <div id="${id}" class="toast toast-custom show" role="alert" style="background:var(--surface)">
+      <div class="toast-header">
+        <span class="material-icons-round me-2" style="color:${colors[type]||colors.info};font-size:20px">${icons[type]||'info'}</span>
+        <strong class="me-auto" style="color:var(--text-primary)">${t(type) || type}</strong>
+        <button type="button" class="btn-close" onclick="document.getElementById('${id}').remove()"></button>
+      </div>
+      <div class="toast-body">${message}</div>
+    </div>`;
+  container.insertAdjacentHTML('beforeend', html);
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, duration);
+}
+
+// ── Loading helpers ───────────────────────────────────────────
+
+function showPageLoader(containerId) {
+  const el = document.getElementById(containerId || 'pageContent');
+  if (el) el.innerHTML = `
+    <div class="d-flex justify-content-center align-items-center py-5">
+      <div class="wave-loader">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>`;
+}
+
+// Shows a centered spinner inside any table-wrapper element while a search/filter
+// request is in flight, so the user gets visual feedback that something is happening.
+function showTableLoader(wrapperId) {
+  const el = document.getElementById(wrapperId);
+  if (el) el.innerHTML = `
+    <div class="d-flex justify-content-center align-items-center py-5">
+      <div class="wave-loader">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>`;
+}
+
+// ── Utility ───────────────────────────────────────────────────
+
+function openMyProfile() { navigateTo('myProfile'); }
+
+function escapeHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDateAr(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString(APP.lang === 'ar' ? 'ar-EG' : 'en-US');
+}
+
+function zeroPad(n) { return String(n).padStart(2, '0'); }
+
+// ── Unified time-format helpers (HH:MM:SS) ──────────────────────
+// All overtime/delay/mission/permission DURATIONS are stored internally as
+// plain decimal hours (e.g. 5.5) so calculations stay simple and accurate.
+// These helpers only affect DISPLAY: they convert decimal hours <-> HH:MM:SS
+// text, correctly handling totals beyond 24 hours (e.g. 50:00:00).
+
+// decimal hours -> "HH:MM:SS" (no day wraparound — supports 50:00:00 etc.)
+function hoursToHMS(decimalHours) {
+  const total = Math.round((parseFloat(decimalHours) || 0) * 3600); // total seconds
+  const sign = total < 0 ? '-' : '';
+  const abs = Math.abs(total);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+  return `${sign}${zeroPad(h)}:${zeroPad(m)}:${zeroPad(s)}`;
+}
+
+// decimal hours -> "HH:MM" (no seconds) — used specifically for Overtime display,
+// per requirement: overtime shows hours and minutes only, no day wraparound issue
+// since hours are not capped at 24 (e.g. 50:00 for 50 hours).
+function hoursToHM(decimalHours) {
+  const totalMinutes = Math.round((parseFloat(decimalHours) || 0) * 60);
+  const sign = totalMinutes < 0 ? '-' : '';
+  const abs = Math.abs(totalMinutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return `${sign}${zeroPad(h)}:${zeroPad(m)}`;
+}
+
+// decimal MINUTES -> "HH:MM:SS" (kept for any place that still needs seconds precision)
+function minutesToHMS(decimalMinutes) {
+  return hoursToHMS((parseFloat(decimalMinutes) || 0) / 60);
+}
+
+// decimal MINUTES -> "HH:MM" (no seconds) — the standard display format across
+// the whole project for Delay/Early-Leave minutes, matching hoursToHM for hours.
+function minutesToHM(decimalMinutes) {
+  return hoursToHM((parseFloat(decimalMinutes) || 0) / 60);
+}
+
+// "HH:MM:SS" or "HH:MM" -> decimal hours (for parsing manual time-format input back)
+function hmsToHours(hms) {
+  if (!hms) return 0;
+  const parts = String(hms).split(':').map(p => parseInt(p, 10) || 0);
+  const h = parts[0] || 0, m = parts[1] || 0, s = parts[2] || 0;
+  return h + m / 60 + s / 3600;
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+}
+
+// ── Generic client-side Excel/CSV export ──────────────────────
+// Takes an array of plain objects + optional header label map, downloads as
+// a CSV file with UTF-8 BOM so Excel opens Arabic text correctly.
+function exportArrayToExcel(data, filename, headerLabels) {
+  if (!data || !data.length) {
+    showToast(t('noData'), 'warning');
+    return;
+  }
+  const keys = Object.keys(data[0]);
+  const headerRow = keys.map(k => (headerLabels && headerLabels[k]) ? headerLabels[k] : k);
+  const escapeCsv = (val) => `"${String(val === undefined || val === null ? '' : val).replace(/"/g, '""')}"`;
+
+  const lines = [
+    headerRow.map(escapeCsv).join(','),
+    ...data.map(row => keys.map(k => escapeCsv(row[k])).join(',')),
+  ];
+  const csv  = lines.join('\r\n');
+  // داخل تطبيق الأندرويد (APK): احفظ الملف عن طريق الجسر بدل رابط التحميل
+  if (window.AndroidBridge && window.AndroidBridge.saveFile) {
+    window.AndroidBridge.saveFile((filename || 'export') + '.csv', 'text/csv', '\uFEFF' + csv);
+    SFX.exportData();
+    return;
+  }
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = (filename || 'export') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  SFX.exportData();
+  showToast(t('recordSaved'), 'success');
+}
+
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    SFX.deleteConfirm();
+    const msg = message || t('deleteConfirm');
+    let modalEl = document.getElementById('appConfirmModal');
+    if (!modalEl) {
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <div class="modal fade" id="appConfirmModal" tabindex="-1" data-bs-backdrop="static">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-body text-center p-4">
+                <div class="mb-3">
+                  <span class="material-icons-round" style="font-size:48px;color:var(--warning)">help_outline</span>
+                </div>
+                <div id="appConfirmMsg" class="fw-bold mb-4" style="font-size:15px;color:var(--text-primary)"></div>
+                <div class="d-flex gap-2 justify-content-center">
+                  <button class="btn btn-secondary px-4" id="appConfirmCancel">${t('cancel')}</button>
+                  <button class="btn btn-danger px-4" id="appConfirmOk">${t('confirm')}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(div.firstElementChild);
+      modalEl = document.getElementById('appConfirmModal');
+    }
+    document.getElementById('appConfirmMsg').textContent = msg;
+    const modal = new bootstrap.Modal(modalEl);
+    const okBtn     = document.getElementById('appConfirmOk');
+    const cancelBtn = document.getElementById('appConfirmCancel');
+
+    const cleanup = (result) => {
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      modal.hide();
+      resolve(result);
+    };
+    okBtn.onclick     = () => { SFX.deleted(); cleanup(true); };
+    cancelBtn.onclick = () => { SFX.modalClose(); cleanup(false); };
+    modalEl.addEventListener('hidden.bs.modal', () => resolve(false), { once: true });
+    modal.show();
+  });
+}
+
+// Pagination state
+const PAGINATION = { page: 1, perPage: 15, total: 0 };
+
+function buildPagination(total, currentPage, perPage, onPageChange) {
+  const pages = Math.ceil(total / perPage);
+  if (pages <= 1) return '';
+  const from = (currentPage - 1) * perPage + 1;
+  const to   = Math.min(currentPage * perPage, total);
+  let btns = '';
+  for (let i = 1; i <= pages; i++) {
+    btns += `<div class="page-btn ${i === currentPage ? 'active' : ''}" onclick="(${onPageChange})(${i})">${i}</div>`;
+  }
+  return `
+    <div class="pagination-wrapper">
+      <span>عرض ${from}–${to} من ${total}</span>
+      <div class="d-flex gap-1">${btns}</div>
+    </div>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// SORTABLE + FILTERABLE TABLES UTILITY
+// ══════════════════════════════════════════════════════════════
+
+function initAllTables() {
+  document.querySelectorAll('table.data-table:not([data-sortable])').forEach(tbl => {
+    tbl.setAttribute('data-sortable', '1');
+    _buildSortFilter(tbl);
+  });
+}
+
+function _buildSortFilter(table) {
+  const headers = Array.from(table.querySelectorAll('thead th'));
+  const tbody   = table.querySelector('tbody');
+  if (!tbody) return;
+
+  let sortCol = -1, sortAsc = true;
+
+  // ── Add sort icons + click handlers ──────────────────────
+  headers.forEach((th, idx) => {
+    const key = (th.dataset.i18n || th.textContent || '').toLowerCase().trim();
+    const isActions = key === 'actions' || key === 'الإجراءات' || key === 'إجراءات';
+    if (isActions) return;
+
+    th.style.cursor = 'pointer';
+    th.style.userSelect = 'none';
+
+    const icon = document.createElement('span');
+    icon.className = 'sort-icon material-icons-round';
+    icon.textContent = 'unfold_more';
+    th.appendChild(icon);
+
+    th.addEventListener('click', () => {
+      const asc = (sortCol === idx) ? !sortAsc : true;
+      sortCol = idx; sortAsc = asc;
+      _sortRows(tbody, idx, asc);
+      headers.forEach((h, i) => {
+        const ic = h.querySelector('.sort-icon');
+        if (!ic) return;
+        if (i === idx) { ic.textContent = asc ? 'arrow_upward' : 'arrow_downward'; ic.style.color = 'var(--accent)'; ic.style.opacity = '1'; }
+        else           { ic.textContent = 'unfold_more'; ic.style.color = ''; ic.style.opacity = '0.4'; }
+      });
+    });
+  });
+
+  // ── Add filter row under headers ──────────────────────────
+  const filterRow = document.createElement('tr');
+  filterRow.className = 'table-filter-row';
+  headers.forEach((th, idx) => {
+    const td = document.createElement('td');
+    const key = (th.dataset.i18n || th.textContent || '').toLowerCase().trim();
+    const isActions = key === 'actions' || key === 'الإجراءات' || key === 'إجراءات';
+    if (isActions) { td.innerHTML = ''; filterRow.appendChild(td); return; }
+
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = '🔍';
+    inp.className = 'table-filter-input';
+    inp.addEventListener('input', () => _filterRows(tbody, headers.length, getFilterValues(filterRow)));
+    td.appendChild(inp);
+    filterRow.appendChild(td);
+  });
+  table.querySelector('thead').appendChild(filterRow);
+
+  // ── Auto-sort by date column (ascending = oldest first) ───
+  const dateKeywords = ['date','تاريخ','يوم','من','from'];
+  let dateCol = headers.findIndex(th => {
+    const k = (th.dataset.i18n || th.textContent || '').toLowerCase();
+    return dateKeywords.some(d => k.includes(d));
+  });
+  if (dateCol === -1) dateCol = 0;
+  sortCol = dateCol; sortAsc = true;
+  _sortRows(tbody, dateCol, true);
+  const autoIc = headers[dateCol] && headers[dateCol].querySelector('.sort-icon');
+  if (autoIc) { autoIc.textContent = 'arrow_upward'; autoIc.style.color = 'var(--accent)'; autoIc.style.opacity = '1'; }
+}
+
+function getFilterValues(filterRow) {
+  return Array.from(filterRow.querySelectorAll('td')).map(td => {
+    const inp = td.querySelector('input');
+    return inp ? inp.value.trim().toLowerCase() : '';
+  });
+}
+
+function _filterRows(tbody, colCount, filters) {
+  Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+    const show = filters.every((f, i) => {
+      if (!f) return true;
+      const cell = row.cells[i];
+      return cell && (cell.dataset.value || cell.textContent || '').toLowerCase().includes(f);
+    });
+    row.style.display = show ? '' : 'none';
+  });
+}
+
+function _sortRows(tbody, colIdx, asc) {
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  rows.sort((a, b) => {
+    const av = _cellVal(a, colIdx);
+    const bv = _cellVal(b, colIdx);
+    // Try numeric/date compare first
+    const an = Date.parse(av) || Number(av.replace(/[^0-9.]/g,''));
+    const bn = Date.parse(bv) || Number(bv.replace(/[^0-9.]/g,''));
+    if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+    return asc ? av.localeCompare(bv, 'ar', {numeric:true}) : bv.localeCompare(av, 'ar', {numeric:true});
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+function _cellVal(row, idx) {
+  const c = row.cells[idx];
+  return c ? (c.dataset.value || c.textContent || '').trim() : '';
+}
+// ── Global Button Hover & Click Sounds ───────────────────────
+// Runs once after DOM is ready; uses event delegation for efficiency
+(function initGlobalButtonSounds() {
+  const HOVER_SELECTORS = '.btn, .nav-item-link, .page-btn, .sidebar-item, [data-page]';
+  let _lastHover = null;
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest(HOVER_SELECTORS);
+    if (el && el !== _lastHover && !el.disabled) {
+      _lastHover = el;
+      SFX.hover();
+    }
+  }, { passive: true });
+
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target.closest(HOVER_SELECTORS);
+    if (el && _lastHover === el) _lastHover = null;
+  }, { passive: true });
+
+  // Generic click sound for buttons not already handled by specific functions
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('.btn, .btn-close, .page-btn');
+    if (el && !el.closest('#appConfirmModal')) {
+      // Only play if no specific SFX function is already triggered
+      // (login/logout/delete have their own sounds via their handlers)
+      const isLoginBtn   = el.id === 'loginBtn';
+      const isLogoutLink = el.closest('[onclick*="doLogout"]');
+      if (!isLoginBtn && !isLogoutLink) {
+        SFX.click();
+      }
+    }
+  }, { passive: true });
+
+  // Modal open/close sounds via Bootstrap events
+  document.addEventListener('show.bs.modal', () => {
+    SFX.modalOpen();
+  });
+  document.addEventListener('hide.bs.modal', (e) => {
+    // Don't double-play for confirm dialog (handled separately)
+    if (e.target && e.target.id !== 'appConfirmModal') {
+      SFX.modalClose();
+    }
+  });
+})();
+
+// ── SFX Toggle ────────────────────────────────────────────────
+function sfxToggle() {
+  const nowEnabled = SFX.toggle();
+  const icon = nowEnabled ? 'volume_up' : 'volume_off';
+  ['sfxToggleIcon', 'sfxToggleIconLogin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = icon;
+  });
+  if (nowEnabled) SFX.success();
+}
+
+// Sync SFX icon state on boot (in case saved preference is OFF)
+function syncSfxIcons() {
+  const icon = SFX.isEnabled() ? 'volume_up' : 'volume_off';
+  ['sfxToggleIcon', 'sfxToggleIconLogin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = icon;
+  });
+}
+document.addEventListener('DOMContentLoaded', syncSfxIcons);
+setTimeout(syncSfxIcons, 1500);
+
+</script>
