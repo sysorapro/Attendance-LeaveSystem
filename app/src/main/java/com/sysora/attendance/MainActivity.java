@@ -33,6 +33,8 @@ import android.widget.Toast;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import androidx.fragment.app.FragmentActivity;
 
 import org.json.JSONObject;
@@ -41,6 +43,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.security.KeyStore;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -79,20 +84,25 @@ public class MainActivity extends FragmentActivity {
     private boolean ar() { return !"en".equals(lang); }
 
     private static final String FIX_CSS_JS =
-        "(function(){try{var st=document.createElement('style');"
-      + "st.textContent='html,body{margin:0!important;padding:0!important;height:100%!important;"
-      + "background:#08152b!important;overflow:hidden!important}"
-      + "iframe{position:fixed!important;top:0!important;left:0!important;width:100%!important;"
-      + "height:100%!important;border:0!important}';"
-      + "document.documentElement.appendChild(st);"
-      // إخفاء أي عنصر غير الإطار (رسالة "أنشأ هذا التطبيق أحد مستخدمي برمجة تطبيقات Google")
-      + "function clean(){var f=document.querySelector('iframe');if(!f)return;var n=f;"
-      + "while(n&&n!==document.documentElement){var p=n.parentNode;if(!p)break;var ch=p.children;"
-      + "for(var i=0;i<ch.length;i++){var c=ch[i];var t=c.tagName;"
-      + "if(c!==n&&t!=='SCRIPT'&&t!=='STYLE'&&t!=='LINK'&&t!=='IFRAME'&&t!=='HEAD'){c.style.setProperty('display','none','important');}}"
-      + "n=p;}}"
-      + "clean();new MutationObserver(clean).observe(document.documentElement,{childList:true,subtree:true});"
-      + "}catch(e){}})();";
+        "(function(){if(window.__sysFix)return;window.__sysFix=1;var fixed=false,obs=null;"
+      + "function okHost(){var h=location.hostname;return h==='script.google.com'||h==='script.googleusercontent.com'"
+      + "||h.endsWith('-script.googleusercontent.com');}"
+      + "function clean(){try{if(!okHost())return;"
+      + "if(document.getElementById('app')){if(obs)obs.disconnect();return;}"
+      + "var f=document.getElementById('userHtmlFrame')||document.getElementById('sandboxFrame')||document.querySelector('iframe');"
+      + "if(!f)return;"
+      + "if(!fixed&&document.documentElement){var st=document.createElement('style');"
+      + "st.textContent='html,body{margin:0!important;padding:0!important;height:100%!important;background:#08152b!important;overflow:hidden!important}"
+      + "iframe{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:0!important}';"
+      + "document.documentElement.appendChild(st);fixed=true;}"
+      // إخفاء أي عنصر غير الإطار نفسه (رسالة "أنشأ هذا التطبيق أحد مستخدمي برمجة تطبيقات Google")
+      + "var n=f;while(n&&n!==document.documentElement){var p=n.parentNode;if(!p)break;var ch=p.children;"
+      + "for(var i=0;i<ch.length;i++){var c=ch[i],t=c.tagName;"
+      + "if(c!==n&&t!=='SCRIPT'&&t!=='STYLE'&&t!=='LINK'&&t!=='IFRAME'&&t!=='HEAD'&&t!=='META'&&t!=='TITLE')"
+      + "c.style.setProperty('display','none','important');}n=p;}"
+      + "}catch(e){}}"
+      + "obs=new MutationObserver(clean);obs.observe(document,{childList:true,subtree:true});clean();"
+      + "})();";
 
     // نتائج عمليات البصمة (الصفحة بتسأل عنها بالـ polling)
     private final ConcurrentHashMap<String, String> results = new ConcurrentHashMap<>();
@@ -197,6 +207,15 @@ public class MainActivity extends FragmentActivity {
                 return true;
             }
         });
+
+        // شغّل سكربت الإخفاء داخل كل الإطارات (الرسالة موجودة في إطار داخلي)
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                Set<String> rules = new HashSet<>(Arrays.asList(
+                        "https://script.google.com", "https://*.googleusercontent.com"));
+                WebViewCompat.addDocumentStartJavaScript(webView, FIX_CSS_JS, rules);
+            }
+        } catch (Exception ignored) { }
 
         if (savedInstanceState != null) webView.restoreState(savedInstanceState);
         else loadApp();
