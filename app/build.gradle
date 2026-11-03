@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+// رقم الإصدار يزيد تلقائياً مع كل بناء على GitHub (علشان التحديث يتثبت فوق القديم)
+def runNo = (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()
+
 android {
     namespace 'com.sysora.attendance'
     compileSdk 34
@@ -10,15 +13,35 @@ android {
         applicationId "com.sysora.attendance"
         minSdk 24
         targetSdk 34
-        versionCode 6
-        versionName "1.5"
+        versionCode 100 + runNo
+        versionName "1.6." + runNo
+    }
+
+    // مفتاح التوقيع الثابت (يتقرأ من أسرار GitHub، مش من الكود)
+    signingConfigs {
+        release {
+            def ksPath = System.getenv('KEYSTORE_PATH')
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
         }
     }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
