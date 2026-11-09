@@ -148,6 +148,7 @@ public class MainActivity extends FragmentActivity {
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setAllowFileAccess(false);
         s.setMediaPlaybackRequiresUserGesture(false);
+        s.setTextZoom(100);                    // نفس مقاس الخط بغض النظر عن إعدادات الموبايل
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
